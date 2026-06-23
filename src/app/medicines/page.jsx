@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { PageHeader } from "@/components/ui/page-header";
+import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Plus,
   Search,
@@ -25,11 +28,12 @@ import {
   AlertTriangle,
   Package,
 } from "lucide-react";
-import { formatDate, formatCurrency, getStatusColor } from "@/lib/utils";
+import { formatDate, formatCurrency } from "@/lib/utils";
+import { exportToCSV, exportToExcel } from "@/utils/exportUtils";
 import Link from "next/link";
+import toast from "react-hot-toast";
 
-// Mock data
-const mockMedicines = [
+const initialMedicines = [
   {
     id: 1,
     name: "Paracetamol 500mg",
@@ -115,51 +119,195 @@ const mockMedicines = [
 export default function MedicinesPage() {
   const { isLoading: authLoading } = useAuth(true);
   const [search, setSearch] = useState("");
-  const [medicines] = useState(mockMedicines);
+  const [medicines, setMedicines] = useState(initialMedicines);
+  const [deleteId, setDeleteId] = useState(null);
 
   const filteredMedicines = medicines.filter(
     (med) =>
       med.name.toLowerCase().includes(search.toLowerCase()) ||
       med.generic_name.toLowerCase().includes(search.toLowerCase()) ||
-      med.batch_number.toLowerCase().includes(search.toLowerCase()),
+      med.batch_number.toLowerCase().includes(search.toLowerCase()) ||
+      med.category_name?.toLowerCase().includes(search.toLowerCase()),
   );
 
   const getStatusBadge = (medicine) => {
-    if (medicine.is_expired) {
+    if (medicine.is_expired)
       return <Badge variant="destructive">Expired</Badge>;
-    }
-    if (medicine.is_low_stock) {
+    if (medicine.is_low_stock)
       return <Badge variant="warning">Low Stock</Badge>;
-    }
     return <Badge variant="success">In Stock</Badge>;
+  };
+
+  // DELETE medicine
+  const handleDelete = () => {
+    setMedicines(medicines.filter((m) => m.id !== deleteId));
+    toast.success("Medicine deleted successfully!");
+    setDeleteId(null);
+  };
+
+  // EXPORT to CSV
+  const handleExportCSV = () => {
+    if (filteredMedicines.length === 0) {
+      toast.error("No data to export!");
+      return;
+    }
+    const exportData = filteredMedicines.map((m) => ({
+      Name: m.name,
+      "Generic Name": m.generic_name,
+      Brand: m.brand,
+      Category: m.category_name,
+      Supplier: m.supplier_name,
+      "Batch Number": m.batch_number,
+      "Cost Price": m.cost_price,
+      "Selling Price": m.selling_price,
+      Quantity: m.quantity,
+      "Min Stock": m.minimum_stock,
+      "Expiry Date": m.expiry_date,
+      Status: m.is_expired
+        ? "Expired"
+        : m.is_low_stock
+          ? "Low Stock"
+          : "In Stock",
+    }));
+    exportToCSV(
+      exportData,
+      `medicines-export-${new Date().toISOString().split("T")[0]}`,
+    );
+    toast.success("Exported to CSV successfully!");
+  };
+
+  // EXPORT to Excel
+  const handleExportExcel = () => {
+    if (filteredMedicines.length === 0) {
+      toast.error("No data to export!");
+      return;
+    }
+    const exportData = filteredMedicines.map((m) => ({
+      Name: m.name,
+      "Generic Name": m.generic_name,
+      Brand: m.brand,
+      Category: m.category_name,
+      Supplier: m.supplier_name,
+      "Batch Number": m.batch_number,
+      "Cost Price": m.cost_price,
+      "Selling Price": m.selling_price,
+      Quantity: m.quantity,
+      "Min Stock": m.minimum_stock,
+      "Expiry Date": m.expiry_date,
+      Status: m.is_expired
+        ? "Expired"
+        : m.is_low_stock
+          ? "Low Stock"
+          : "In Stock",
+    }));
+    exportToExcel(
+      exportData,
+      `medicines-export-${new Date().toISOString().split("T")[0]}`,
+    );
+    toast.success("Exported to Excel successfully!");
+  };
+
+  // IMPORT from CSV
+  const handleImport = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".csv";
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const text = event.target.result;
+          const lines = text.split("\n");
+          const headers = lines[0]
+            .split(",")
+            .map((h) => h.trim().replace(/"/g, ""));
+
+          const newMedicines = [];
+          for (let i = 1; i < lines.length; i++) {
+            if (!lines[i].trim()) continue;
+            const values = lines[i]
+              .split(",")
+              .map((v) => v.trim().replace(/"/g, ""));
+            const row = {};
+            headers.forEach((header, index) => {
+              row[header] = values[index];
+            });
+
+            newMedicines.push({
+              id: Date.now() + i,
+              name: row["Name"] || row["name"] || "",
+              generic_name: row["Generic Name"] || row["generic_name"] || "",
+              brand: row["Brand"] || row["brand"] || "",
+              category_name: row["Category"] || row["category_name"] || "",
+              supplier_name: row["Supplier"] || row["supplier_name"] || "",
+              batch_number:
+                row["Batch Number"] ||
+                row["batch_number"] ||
+                `BATCH-${Date.now()}`,
+              cost_price: parseFloat(
+                row["Cost Price"] || row["cost_price"] || 0,
+              ),
+              selling_price: parseFloat(
+                row["Selling Price"] || row["selling_price"] || 0,
+              ),
+              quantity: parseInt(row["Quantity"] || row["quantity"] || 0),
+              minimum_stock: parseInt(
+                row["Min Stock"] || row["minimum_stock"] || 10,
+              ),
+              expiry_date:
+                row["Expiry Date"] || row["expiry_date"] || "2025-12-31",
+              is_low_stock: false,
+              is_expired: false,
+            });
+          }
+
+          if (newMedicines.length > 0) {
+            setMedicines([...medicines, ...newMedicines]);
+            toast.success(`Imported ${newMedicines.length} medicines!`);
+          } else {
+            toast.error("No valid data found in file");
+          }
+        } catch (error) {
+          toast.error("Error reading file. Please check the format.");
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
   };
 
   if (authLoading) return <LoadingSpinner />;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Medicines</h1>
-          <p className="text-gray-500 mt-1">Manage your medicine inventory</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm">
-            <Upload className="h-4 w-4 mr-2" />
-            Import
-          </Button>
-          <Button variant="outline" size="sm">
-            <Download className="h-4 w-4 mr-2" />
-            Export
-          </Button>
-          <Link href="/medicines/add">
-            <Button size="sm">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Medicine
+      <Breadcrumb items={[{ label: "Medicines" }]} />
+
+      <PageHeader
+        title="Medicines"
+        description="Manage your medicine inventory"
+        backUrl="/dashboard"
+        actions={
+          <>
+            <Button variant="outline" size="sm" onClick={handleImport}>
+              <Upload className="h-4 w-4 mr-2" />
+              Import
             </Button>
-          </Link>
-        </div>
-      </div>
+            <Button variant="outline" size="sm" onClick={handleExportCSV}>
+              <Download className="h-4 w-4 mr-2" />
+              Export
+            </Button>
+            <Link href="/medicines/add">
+              <Button size="sm">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Medicine
+              </Button>
+            </Link>
+          </>
+        }
+      />
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -220,12 +368,12 @@ export default function MedicinesPage() {
         </Card>
       </div>
 
-      {/* Search and Table */}
+      {/* Medicine List Table */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <CardTitle>Medicine List</CardTitle>
-            <div className="relative w-64">
+            <div className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
                 placeholder="Search medicines..."
@@ -237,78 +385,112 @@ export default function MedicinesPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Medicine</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Batch</TableHead>
-                <TableHead>Stock</TableHead>
-                <TableHead>Price</TableHead>
-                <TableHead>Expiry Date</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredMedicines.map((medicine) => (
-                <TableRow key={medicine.id}>
-                  <TableCell>
-                    <div>
-                      <p className="font-medium">{medicine.name}</p>
-                      <p className="text-sm text-gray-500">
-                        {medicine.generic_name}
-                      </p>
-                    </div>
-                  </TableCell>
-                  <TableCell>{medicine.category_name}</TableCell>
-                  <TableCell>
-                    <code className="text-xs bg-gray-100 px-2 py-1 rounded">
-                      {medicine.batch_number}
-                    </code>
-                  </TableCell>
-                  <TableCell>
-                    <span
-                      className={
-                        medicine.is_low_stock ? "text-red-600 font-bold" : ""
-                      }
-                    >
-                      {medicine.quantity}
-                    </span>
-                    {medicine.is_low_stock && (
-                      <p className="text-xs text-red-500">
-                        Min: {medicine.minimum_stock}
-                      </p>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div>
-                      <p className="font-medium">
-                        {formatCurrency(medicine.selling_price)}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        Cost: {formatCurrency(medicine.cost_price)}
-                      </p>
-                    </div>
-                  </TableCell>
-                  <TableCell>{formatDate(medicine.expiry_date)}</TableCell>
-                  <TableCell>{getStatusBadge(medicine)}</TableCell>
-                  <TableCell>
-                    <div className="flex gap-2">
-                      <Button variant="ghost" size="sm">
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm">
-                        <Trash2 className="h-4 w-4 text-red-500" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <div className="min-w-[800px] md:min-w-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Medicine</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Batch</TableHead>
+                    <TableHead>Stock</TableHead>
+                    <TableHead>Price</TableHead>
+                    <TableHead>Expiry</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredMedicines.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={8}
+                        className="text-center py-8 text-gray-400"
+                      >
+                        <Search className="h-12 w-12 mx-auto mb-2" />
+                        <p>No medicines found</p>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredMedicines.map((medicine) => (
+                      <TableRow key={medicine.id}>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium text-sm">
+                              {medicine.name}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {medicine.generic_name}
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {medicine.category_name}
+                        </TableCell>
+                        <TableCell>
+                          <code className="text-xs bg-gray-100 px-2 py-1 rounded">
+                            {medicine.batch_number}
+                          </code>
+                        </TableCell>
+                        <TableCell>
+                          <span
+                            className={
+                              medicine.is_low_stock
+                                ? "text-red-600 font-bold text-sm"
+                                : "text-sm"
+                            }
+                          >
+                            {medicine.quantity}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium text-sm">
+                              {formatCurrency(medicine.selling_price)}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              Cost: {formatCurrency(medicine.cost_price)}
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm whitespace-nowrap">
+                          {formatDate(medicine.expiry_date)}
+                        </TableCell>
+                        <TableCell>{getStatusBadge(medicine)}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Link href={`/medicines/${medicine.id}/edit`}>
+                              <Button variant="ghost" size="sm">
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </Link>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setDeleteId(medicine.id)}
+                            >
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation */}
+      <ConfirmDialog
+        isOpen={!!deleteId}
+        onClose={() => setDeleteId(null)}
+        onConfirm={handleDelete}
+        title="Delete Medicine"
+        message="Are you sure you want to delete this medicine?"
+      />
     </div>
   );
 }

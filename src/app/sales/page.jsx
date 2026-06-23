@@ -2,8 +2,11 @@
 
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { PageHeader } from "@/components/ui/page-header";
+import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -14,11 +17,14 @@ import {
 } from "@/components/ui/table";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
-import { ShoppingCart, TrendingUp, DollarSign, Package } from "lucide-react"; // ← ADD THIS
+import {
+  Search,
+  ShoppingCart,
+  TrendingUp,
+  DollarSign,
+  Package,
+} from "lucide-react";
 
-// ... rest of the code
-
-// Mock sales data
 const mockSales = [
   {
     id: 1001,
@@ -60,34 +66,59 @@ const mockSales = [
     items_count: 2,
     created_at: "2024-01-15T09:30:00",
   },
+  {
+    id: 1006,
+    customer_name: "Alice Brown",
+    total_amount: 89.99,
+    payment_method: "Card",
+    items_count: 4,
+    created_at: "2024-01-14T16:20:00",
+  },
+  {
+    id: 1007,
+    customer_name: "Charlie Davis",
+    total_amount: 12.5,
+    payment_method: "Cash",
+    items_count: 1,
+    created_at: "2024-01-14T15:00:00",
+  },
 ];
 
 export default function SalesPage() {
   const { isLoading: authLoading } = useAuth(true);
   const [sales] = useState(mockSales);
+  const [search, setSearch] = useState("");
+
+  const filteredSales = sales.filter(
+    (sale) =>
+      sale.customer_name.toLowerCase().includes(search.toLowerCase()) ||
+      sale.payment_method.toLowerCase().includes(search.toLowerCase()) ||
+      String(sale.id).includes(search),
+  );
 
   const totalRevenue = sales.reduce((sum, sale) => sum + sale.total_amount, 0);
+  const avgSale = totalRevenue / sales.length;
 
   if (authLoading) return <LoadingSpinner />;
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Sales History</h1>
-        <p className="text-gray-500 mt-1">View all sales transactions</p>
-      </div>
+      <Breadcrumb items={[{ label: "Sales History" }]} />
+      <PageHeader
+        title="Sales History"
+        description="View all sales transactions"
+        backUrl="/dashboard"
+      />
 
-      {/* Summary Cards */}
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Today's Sales</p>
-                <p className="text-2xl font-bold">{sales.length}</p>
+                <p className="text-xs md:text-sm text-gray-500">Total Sales</p>
+                <p className="text-xl md:text-2xl font-bold">{sales.length}</p>
               </div>
-              <ShoppingCart className="h-8 w-8 text-blue-500" />
+              <ShoppingCart className="h-6 w-6 md:h-8 md:w-8 text-blue-500" />
             </div>
           </CardContent>
         </Card>
@@ -95,12 +126,12 @@ export default function SalesPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Total Revenue</p>
-                <p className="text-2xl font-bold text-green-600">
+                <p className="text-xs md:text-sm text-gray-500">Revenue</p>
+                <p className="text-xl md:text-2xl font-bold text-green-600">
                   {formatCurrency(totalRevenue)}
                 </p>
               </div>
-              <DollarSign className="h-8 w-8 text-green-500" />
+              <DollarSign className="h-6 w-6 md:h-8 md:w-8 text-green-500" />
             </div>
           </CardContent>
         </Card>
@@ -108,12 +139,12 @@ export default function SalesPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Average Sale</p>
-                <p className="text-2xl font-bold">
-                  {formatCurrency(totalRevenue / sales.length)}
+                <p className="text-xs md:text-sm text-gray-500">Avg Sale</p>
+                <p className="text-xl md:text-2xl font-bold">
+                  {formatCurrency(avgSale)}
                 </p>
               </div>
-              <TrendingUp className="h-8 w-8 text-purple-500" />
+              <TrendingUp className="h-6 w-6 md:h-8 md:w-8 text-purple-500" />
             </div>
           </CardContent>
         </Card>
@@ -121,53 +152,90 @@ export default function SalesPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Total Items Sold</p>
-                <p className="text-2xl font-bold">
+                <p className="text-xs md:text-sm text-gray-500">Items Sold</p>
+                <p className="text-xl md:text-2xl font-bold">
                   {sales.reduce((sum, sale) => sum + sale.items_count, 0)}
                 </p>
               </div>
-              <Package className="h-8 w-8 text-orange-500" />
+              <Package className="h-6 w-6 md:h-8 md:w-8 text-orange-500" />
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Sales Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Recent Transactions</CardTitle>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <CardTitle>Recent Transactions</CardTitle>
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Search sales..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Invoice #</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Items</TableHead>
-                <TableHead>Total</TableHead>
-                <TableHead>Payment Method</TableHead>
-                <TableHead>Date & Time</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sales.map((sale) => (
-                <TableRow key={sale.id}>
-                  <TableCell className="font-medium">#{sale.id}</TableCell>
-                  <TableCell>{sale.customer_name}</TableCell>
-                  <TableCell>{sale.items_count} items</TableCell>
-                  <TableCell className="font-bold">
-                    {formatCurrency(sale.total_amount)}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">{sale.payment_method}</Badge>
-                  </TableCell>
-                  <TableCell className="text-sm text-gray-500">
-                    {formatDateTime(sale.created_at)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <div className="min-w-[600px] md:min-w-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Invoice #</TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Items</TableHead>
+                    <TableHead>Total</TableHead>
+                    <TableHead>Payment</TableHead>
+                    <TableHead>Date</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredSales.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={6}
+                        className="text-center py-8 text-gray-400"
+                      >
+                        <Search className="h-12 w-12 mx-auto mb-2" />
+                        <p>No sales found</p>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredSales.map((sale) => (
+                      <TableRow key={sale.id}>
+                        <TableCell className="font-medium text-sm">
+                          #{sale.id}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {sale.customer_name}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {sale.items_count} items
+                        </TableCell>
+                        <TableCell className="font-bold text-sm">
+                          {formatCurrency(sale.total_amount)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="secondary"
+                            className="whitespace-nowrap"
+                          >
+                            {sale.payment_method}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm text-gray-500 whitespace-nowrap">
+                          {formatDateTime(sale.created_at)}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>
