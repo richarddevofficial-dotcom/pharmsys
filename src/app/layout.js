@@ -5,8 +5,8 @@ import { Providers } from "./providers";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
-  title: "Pharmsys Management",
-  description: "Modern pharmacy management solution",
+  title: "PharmPlus - Pharmacy Management System",
+  description: "Complete pharmacy management solution powered by PharmPlus",
 };
 
 export default function RootLayout({ children }) {

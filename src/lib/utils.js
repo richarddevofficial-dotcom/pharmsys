@@ -5,11 +5,27 @@ export function cn(...inputs) {
   return twMerge(clsx(inputs));
 }
 
-export function formatCurrency(amount) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(amount);
+export function formatCurrency(amount, currency = "SSP") {
+  const symbols = {
+    SSP: "SSP ",
+    USD: "$",
+    EUR: "€",
+    GBP: "£",
+  };
+
+  const symbol = symbols[currency] || "$";
+
+  if (currency === "SSP") {
+    return `${symbol}${Number(amount).toLocaleString("en-US", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    })}`;
+  }
+
+  return `${symbol}${Number(amount).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 export function formatDate(date) {
@@ -74,18 +90,9 @@ export function getInitials(name) {
     .slice(0, 2);
 }
 
-export function debounce(func, wait) {
-  let timeout;
-  return function executedFunction(...args) {
-    const later = () => {
-      clearTimeout(timeout);
-      func(...args);
-    };
-    clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
-  };
-}
-
-export function classNames(...classes) {
-  return classes.filter(Boolean).join(" ");
+export function convertCurrency(amount, from, to, rate = 6500) {
+  if (from === to) return amount;
+  if (from === "SSP" && to === "USD") return amount / rate;
+  if (from === "USD" && to === "SSP") return amount * rate;
+  return amount;
 }

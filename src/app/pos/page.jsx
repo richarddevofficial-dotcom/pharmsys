@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { useSettingsStore } from "@/store/settingsStore";
 import { PageHeader } from "@/components/ui/page-header";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,7 +33,7 @@ const mockMedicines = [
     id: 1,
     name: "Paracetamol 500mg",
     generic_name: "Paracetamol",
-    selling_price: 5.99,
+    selling_price: 500,
     quantity: 100,
     batch_number: "B001",
   },
@@ -40,7 +41,7 @@ const mockMedicines = [
     id: 2,
     name: "Amoxicillin 250mg",
     generic_name: "Amoxicillin",
-    selling_price: 12.5,
+    selling_price: 1200,
     quantity: 50,
     batch_number: "B002",
   },
@@ -48,7 +49,7 @@ const mockMedicines = [
     id: 3,
     name: "Ibuprofen 400mg",
     generic_name: "Ibuprofen",
-    selling_price: 8.99,
+    selling_price: 800,
     quantity: 75,
     batch_number: "B003",
   },
@@ -56,7 +57,7 @@ const mockMedicines = [
     id: 4,
     name: "Omeprazole 20mg",
     generic_name: "Omeprazole",
-    selling_price: 15.0,
+    selling_price: 1500,
     quantity: 30,
     batch_number: "B004",
   },
@@ -64,7 +65,7 @@ const mockMedicines = [
     id: 5,
     name: "Cetirizine 10mg",
     generic_name: "Cetirizine",
-    selling_price: 7.5,
+    selling_price: 700,
     quantity: 60,
     batch_number: "B005",
   },
@@ -72,7 +73,7 @@ const mockMedicines = [
     id: 6,
     name: "Vitamin C 1000mg",
     generic_name: "Ascorbic Acid",
-    selling_price: 10.99,
+    selling_price: 1000,
     quantity: 90,
     batch_number: "B006",
   },
@@ -80,7 +81,7 @@ const mockMedicines = [
     id: 7,
     name: "Metformin 500mg",
     generic_name: "Metformin",
-    selling_price: 6.5,
+    selling_price: 600,
     quantity: 45,
     batch_number: "B007",
   },
@@ -88,7 +89,7 @@ const mockMedicines = [
     id: 8,
     name: "Aspirin 300mg",
     generic_name: "Aspirin",
-    selling_price: 4.99,
+    selling_price: 400,
     quantity: 120,
     batch_number: "B008",
   },
@@ -96,6 +97,10 @@ const mockMedicines = [
 
 export default function POSPage() {
   const { user, isLoading: authLoading } = useAuth(true);
+  // READ ALL SETTINGS FROM STORE - including taxRate
+  const { currency, showBothCurrencies, usdToSspRate, taxRate } =
+    useSettingsStore();
+
   const [cart, setCart] = useState([]);
   const [search, setSearch] = useState("");
   const [discount, setDiscount] = useState(0);
@@ -105,6 +110,11 @@ export default function POSPage() {
   const [lastSale, setLastSale] = useState(null);
   const [lastReceipt, setLastReceipt] = useState(null);
   const [showScanner, setShowScanner] = useState(false);
+  const [selectedCurrency, setSelectedCurrency] = useState(currency || "SSP");
+
+  // Use settings from store
+  const exchangeRate = usdToSspRate || 1500;
+  const currentTaxRate = taxRate || 5;
 
   const filteredMedicines = mockMedicines.filter(
     (med) =>
@@ -125,14 +135,13 @@ export default function POSPage() {
     } else {
       setCart([...cart, { ...medicine, quantity: 1 }]);
     }
-    toast.success(`${medicine.name} added to cart`);
+    toast.success(`${medicine.name} added`, { duration: 1000 });
   };
 
   const handleBarcodeScan = (barcode) => {
     const medicine = mockMedicines.find((m) => m.batch_number === barcode);
     if (medicine) {
       addToCart(medicine);
-      toast.success(`${medicine.name} found!`);
     } else {
       toast.error("Medicine not found");
     }
@@ -162,40 +171,46 @@ export default function POSPage() {
   };
 
   const subtotal = cart.reduce((s, i) => s + i.selling_price * i.quantity, 0);
-  const tax = subtotal * 0.05;
+  // Use tax rate from settings
+  const tax = subtotal * (currentTaxRate / 100);
   const discountAmount = subtotal * (discount / 100);
   const total = subtotal + tax - discountAmount;
+
+  const displaySubtotal =
+    selectedCurrency === "USD" ? subtotal / exchangeRate : subtotal;
+  const displayTax = selectedCurrency === "USD" ? tax / exchangeRate : tax;
+  const displayDiscount =
+    selectedCurrency === "USD" ? discountAmount / exchangeRate : discountAmount;
+  const displayTotal =
+    selectedCurrency === "USD" ? total / exchangeRate : total;
 
   const completeSale = () => {
     if (cart.length === 0) {
       toast.error("Cart is empty!");
       return;
     }
-
     const invoice = {
       id: Date.now(),
       items: cart,
-      subtotal,
-      tax,
-      discount: discountAmount,
+      subtotal: displaySubtotal,
+      taxRate: currentTaxRate,
+      tax: displayTax,
+      discount: displayDiscount,
       discountPercent: discount,
-      total,
+      total: displayTotal,
+      currency: selectedCurrency,
+      exchangeRate: exchangeRate,
       paymentMethod,
       date: new Date().toISOString(),
       cashier: user?.first_name || "User",
     };
-
     setLastSale(invoice);
     setLastReceipt(invoice);
     setShowReceipt(true);
-
-    // Show success toast FIRST
-    toast.success(`✅ Sale completed! Total: ${formatCurrency(total)}`, {
-      duration: 4000,
-      position: "top-center",
-    });
-
-    // Then clear cart
+    toast.success(
+      `✅ Sale completed! Total: ${formatCurrency(displayTotal, selectedCurrency)}`,
+      { duration: 4000 },
+    );
     setCart([]);
     setDiscount(0);
     setShowPayment(false);
@@ -220,7 +235,7 @@ export default function POSPage() {
                 setLastSale(lastReceipt);
                 setShowReceipt(true);
               } else {
-                toast.error("No previous receipt found");
+                toast.error("No previous receipt");
               }
             }}
           >
@@ -231,7 +246,7 @@ export default function POSPage() {
       />
 
       <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 min-h-0">
-        {/* Products */}
+        {/* Left Side - Products */}
         <div className="flex-1 space-y-4 min-w-0">
           <div className="flex gap-2">
             <div className="relative flex-1">
@@ -251,7 +266,7 @@ export default function POSPage() {
               <Scan className="h-4 w-4" />
             </Button>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2 md:gap-3 overflow-y-auto max-h-[calc(100vh-380px)] lg:max-h-[calc(100vh-300px)]">
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2 md:gap-3 overflow-y-auto max-h-[calc(100vh-250px)]">
             {filteredMedicines.map((med) => (
               <button
                 key={med.id}
@@ -263,7 +278,12 @@ export default function POSPage() {
                 </h3>
                 <div className="flex justify-between items-center mt-2">
                   <span className="text-sm md:text-lg font-bold text-orange-600">
-                    ${med.selling_price.toFixed(2)}
+                    {formatCurrency(
+                      selectedCurrency === "USD"
+                        ? med.selling_price / exchangeRate
+                        : med.selling_price,
+                      selectedCurrency,
+                    )}
                   </span>
                 </div>
               </button>
@@ -271,13 +291,16 @@ export default function POSPage() {
           </div>
         </div>
 
-        {/* Cart */}
-        <div className="w-full lg:w-96 flex flex-col">
-          <Card className="flex-1 flex flex-col">
-            <CardHeader className="pb-3">
+        {/* Right Side - Cart */}
+        <div
+          className="w-full lg:w-96 flex flex-col"
+          style={{ maxHeight: "calc(100vh - 180px)" }}
+        >
+          <Card className="flex-1 flex flex-col overflow-hidden">
+            <CardHeader className="pb-2 flex-shrink-0 border-b">
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2 text-lg">
-                  <ShoppingCart className="h-5 w-5" />
+                  <ShoppingCart className="h-5 w-5 text-orange-500" />
                   Cart ({cart.length})
                 </CardTitle>
                 {cart.length > 0 && (
@@ -293,150 +316,214 @@ export default function POSPage() {
                 )}
               </div>
             </CardHeader>
-            <CardContent className="flex-1 flex flex-col p-0">
-              <div className="flex-1 space-y-1 overflow-y-auto px-6 max-h-[calc(100vh-500px)]">
-                {cart.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg"
-                  >
-                    <div className="flex-1">
-                      <p className="font-medium text-sm truncate">
-                        {item.name}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        ${item.selling_price.toFixed(2)} x {item.quantity}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-7 w-7"
-                        onClick={() => updateQuantity(item.id, -1)}
-                      >
-                        <Minus className="h-3 w-3" />
-                      </Button>
-                      <span className="w-8 text-center text-sm font-medium">
-                        {item.quantity}
+
+            <div className="flex-1 overflow-y-auto">
+              {cart.length === 0 ? (
+                <div className="text-center py-16 text-gray-400">
+                  <ShoppingCart className="h-16 w-16 mx-auto mb-3 text-gray-300" />
+                  <p className="text-base font-medium">Cart is empty</p>
+                  <p className="text-sm mt-1">Tap on medicines to add them</p>
+                </div>
+              ) : (
+                <div className="flex flex-col">
+                  {/* Totals Section */}
+                  <div className="px-4 py-3 space-y-2 border-b bg-white">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-700">
+                        Currency
                       </span>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-7 w-7"
-                        onClick={() => updateQuantity(item.id, 1)}
-                      >
-                        <Plus className="h-3 w-3" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-red-500"
-                        onClick={() => removeFromCart(item.id)}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => setSelectedCurrency("SSP")}
+                          className={`px-4 py-1.5 text-xs rounded-md font-medium ${selectedCurrency === "SSP" ? "bg-orange-500 text-white" : "bg-gray-100 text-gray-600"}`}
+                        >
+                          SSP
+                        </button>
+                        <button
+                          onClick={() => setSelectedCurrency("USD")}
+                          className={`px-4 py-1.5 text-xs rounded-md font-medium ${selectedCurrency === "USD" ? "bg-orange-500 text-white" : "bg-gray-100 text-gray-600"}`}
+                        >
+                          USD
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-              {cart.length > 0 && (
-                <div className="border-t px-6 py-4 space-y-2 bg-white">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Subtotal</span>
-                    <span>{formatCurrency(subtotal)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Tax (5%)</span>
-                    <span>{formatCurrency(tax)}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-500">Discount (%)</span>
-                    <Input
-                      type="number"
-                      value={discount}
-                      onChange={(e) =>
-                        setDiscount(
-                          Math.min(100, Math.max(0, Number(e.target.value))),
-                        )
-                      }
-                      className="w-20 h-8 text-sm"
-                    />
-                    <span className="text-sm text-red-500">
-                      -{formatCurrency(discountAmount)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between font-bold text-lg border-t pt-2">
-                    <span>Total</span>
-                    <span className="text-orange-600">
-                      {formatCurrency(total)}
-                    </span>
-                  </div>
-                  {!showPayment ? (
-                    <Button
-                      className="w-full mt-2 bg-orange-500 hover:bg-orange-600"
-                      size="lg"
-                      onClick={() => setShowPayment(true)}
-                    >
-                      <CreditCard className="h-5 w-5 mr-2" />
-                      Proceed to Payment
-                    </Button>
-                  ) : (
-                    <div className="space-y-3 mt-2">
-                      <p className="font-medium text-sm">Payment Method:</p>
-                      <div className="grid grid-cols-2 gap-2">
-                        {[
-                          { method: "cash", icon: Banknote, label: "Cash" },
-                          { method: "card", icon: CreditCard, label: "Card" },
-                          {
-                            method: "mobile",
-                            icon: Smartphone,
-                            label: "Mobile",
-                          },
-                          {
-                            method: "transfer",
-                            icon: Banknote,
-                            label: "Transfer",
-                          },
-                        ].map(({ method, icon: Icon, label }) => (
+
+                    <div className="space-y-1 bg-gray-50 rounded-lg p-3">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Subtotal</span>
+                        <span className="font-medium">
+                          {formatCurrency(displaySubtotal, selectedCurrency)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">
+                          Tax ({currentTaxRate}%)
+                        </span>
+                        <span>
+                          {formatCurrency(displayTax, selectedCurrency)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm text-gray-500">
+                          Discount %
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <Input
+                            type="number"
+                            value={discount}
+                            onChange={(e) =>
+                              setDiscount(
+                                Math.min(
+                                  100,
+                                  Math.max(0, Number(e.target.value)),
+                                ),
+                              )
+                            }
+                            className="w-14 h-7 text-sm text-center"
+                          />
+                          <span className="text-xs text-red-500">
+                            -{formatCurrency(displayDiscount, selectedCurrency)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex justify-between font-bold text-base border-t pt-2">
+                        <span>TOTAL</span>
+                        <span className="text-orange-600">
+                          {formatCurrency(displayTotal, selectedCurrency)}
+                        </span>
+                      </div>
+                      {showBothCurrencies && (
+                        <div className="text-xs text-gray-400 text-center bg-white rounded p-1">
+                          {selectedCurrency === "SSP"
+                            ? `≈ ${formatCurrency(displayTotal / exchangeRate, "USD")} USD`
+                            : `≈ ${formatCurrency(displayTotal * exchangeRate, "SSP")} SSP`}
+                        </div>
+                      )}
+                    </div>
+
+                    {!showPayment ? (
+                      <Button
+                        className="w-full bg-orange-500 hover:bg-orange-600 font-bold py-5 text-base"
+                        onClick={() => setShowPayment(true)}
+                      >
+                        <CreditCard className="h-5 w-5 mr-2" />
+                        Pay {formatCurrency(displayTotal, selectedCurrency)}
+                      </Button>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-gray-700">
+                          Payment Method:
+                        </p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { method: "cash", icon: Banknote, label: "Cash" },
+                            { method: "card", icon: CreditCard, label: "Card" },
+                            {
+                              method: "mobile",
+                              icon: Smartphone,
+                              label: "Mobile",
+                            },
+                            {
+                              method: "transfer",
+                              icon: Banknote,
+                              label: "Transfer",
+                            },
+                          ].map(({ method, icon: Icon, label }) => (
+                            <button
+                              key={method}
+                              onClick={() => setPaymentMethod(method)}
+                              className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium ${paymentMethod === method ? "bg-orange-500 text-white" : "bg-gray-100 text-gray-600"}`}
+                            >
+                              <Icon className="h-4 w-4" />
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex gap-2">
                           <Button
-                            key={method}
-                            variant={
-                              paymentMethod === method ? "default" : "outline"
-                            }
-                            size="sm"
-                            onClick={() => setPaymentMethod(method)}
-                            className={
-                              paymentMethod === method
-                                ? "bg-orange-500 hover:bg-orange-600"
-                                : ""
-                            }
+                            className="flex-1 bg-green-600 hover:bg-green-700 font-bold py-5 text-base"
+                            onClick={completeSale}
                           >
-                            <Icon className="h-4 w-4 mr-2" />
-                            {label}
+                            Complete Sale
                           </Button>
-                        ))}
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-auto"
+                            onClick={() => setShowPayment(false)}
+                          >
+                            <X className="h-5 w-5" />
+                          </Button>
+                        </div>
                       </div>
-                      <div className="flex gap-2">
-                        <Button
-                          className="flex-1 bg-orange-500 hover:bg-orange-600"
-                          onClick={completeSale}
+                    )}
+                  </div>
+
+                  {/* Items List */}
+                  <div className="px-3 py-3">
+                    <p className="text-xs text-gray-500 font-medium px-1 mb-2">
+                      Selected Items ({cart.length}):
+                    </p>
+                    <div className="space-y-2">
+                      {cart.map((item) => (
+                        <div
+                          key={item.id}
+                          className="bg-gray-50 rounded-lg p-3 border border-gray-100"
                         >
-                          Complete - {formatCurrency(total)}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={() => setShowPayment(false)}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
+                          <div className="flex justify-between items-start mb-2">
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-sm truncate">
+                                {item.name}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                {formatCurrency(
+                                  selectedCurrency === "USD"
+                                    ? item.selling_price / exchangeRate
+                                    : item.selling_price,
+                                  selectedCurrency,
+                                )}{" "}
+                                / unit
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => removeFromCart(item.id)}
+                              className="text-gray-400 hover:text-red-500 flex-shrink-0 ml-2"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => updateQuantity(item.id, -1)}
+                              className="w-9 h-9 rounded-lg border-2 border-gray-300 flex items-center justify-center hover:bg-red-50 hover:border-red-300 text-lg font-bold text-gray-600"
+                            >
+                              −
+                            </button>
+                            <span className="w-10 text-center text-lg font-bold">
+                              {item.quantity}
+                            </span>
+                            <button
+                              onClick={() => updateQuantity(item.id, 1)}
+                              className="w-9 h-9 rounded-lg border-2 border-gray-300 flex items-center justify-center hover:bg-green-50 hover:border-green-300 text-lg font-bold text-gray-600"
+                            >
+                              +
+                            </button>
+                            <span className="w-24 text-right text-sm font-bold text-orange-600">
+                              {formatCurrency(
+                                (selectedCurrency === "USD"
+                                  ? item.selling_price / exchangeRate
+                                  : item.selling_price) * item.quantity,
+                                selectedCurrency,
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  )}
+                  </div>
                 </div>
               )}
-            </CardContent>
+            </div>
           </Card>
         </div>
       </div>
@@ -446,7 +533,6 @@ export default function POSPage() {
         onClose={() => setShowScanner(false)}
         onScan={handleBarcodeScan}
       />
-
       {showReceipt && lastSale && (
         <ReceiptModal
           sale={lastSale}

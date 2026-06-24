@@ -1,70 +1,54 @@
 "use client";
 
-import { useState } from "react";
 import { Printer, X } from "lucide-react";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
+import { useSettingsStore } from "@/store/settingsStore";
 
 export function ReceiptModal({ sale, onClose }) {
+  const {
+    pharmacyName,
+    pharmacyAddress,
+    pharmacyPhone,
+    receiptFooter,
+    systemName,
+    showBothCurrencies,
+    usdToSspRate,
+  } = useSettingsStore();
+
   if (!sale) return null;
+
+  const currency = sale.currency || "SSP";
+  const totalInOther =
+    currency === "SSP"
+      ? formatCurrency((sale.total || 0) / usdToSspRate, "USD")
+      : formatCurrency((sale.total || 0) * usdToSspRate, "SSP");
 
   const handlePrint = () => {
     const printWindow = window.open("", "_blank", "width=400,height=600");
-
     printWindow.document.write(`
-      <html>
-        <head>
-          <title>Receipt</title>
-          <style>
-            body { font-family: 'Courier New', monospace; font-size: 10px; width: 80mm; margin: 0 auto; padding: 5mm; }
-            .center { text-align: center; }
-            .dashed { border-top: 1px dashed #000; padding: 5px 0; margin: 5px 0; }
-            .row { display: flex; justify-content: space-between; margin: 2px 0; }
-            .bold { font-weight: bold; }
-            h3 { font-size: 12px; margin: 0 0 4px 0; }
-            @media print { body { width: 80mm; } }
-          </style>
-        </head>
-        <body>
-          <div class="center"><h3>PHARMASYS PHARMACY</h3><p>123 Health Street</p></div>
-          <div class="dashed"></div>
-          <div class="row"><span>Invoice:</span><span class="bold">#${String(sale.id).slice(-8)}</span></div>
-          <div class="row"><span>Date:</span><span>${formatDateTime(sale.date || new Date().toISOString())}</span></div>
-          <div class="row"><span>Payment:</span><span>${sale.paymentMethod || "Cash"}</span></div>
-          <div class="dashed"></div>
-          ${(sale.items || [])
-            .map(
-              (item) => `
-            <div class="row"><span>${item.name}</span><span>${item.quantity} x ${formatCurrency(item.selling_price)} = ${formatCurrency(item.selling_price * item.quantity)}</span></div>
-          `,
-            )
-            .join("")}
-          <div class="dashed"></div>
-          <div class="row bold" style="font-size:12px"><span>TOTAL:</span><span>${formatCurrency(sale.total || 0)}</span></div>
-          <div class="dashed"></div>
-          <div class="center"><p class="bold">Thank You!</p></div>
-          <script>
-            window.onload = function() {
-              window.print();
-              setTimeout(function() { window.close(); }, 1000);
-            };
-            // After print, notify parent window
-            window.onafterprint = function() {
-              if (window.opener && !window.opener.closed) {
-                window.opener.postMessage('receiptPrinted', '*');
-              }
-              window.close();
-            };
-          </script>
-        </body>
-      </html>
+      <html><head><title>Receipt</title>
+      <style>body{font-family:'Courier New',monospace;font-size:10px;width:80mm;margin:0 auto;padding:5mm}.center{text-align:center}.dashed{border-top:1px dashed #000;padding:5px 0;margin:5px 0}.row{display:flex;justify-content:space-between;margin:2px 0}.bold{font-weight:bold}h3{font-size:12px;margin:0 0 4px 0}.powered{font-size:8px;color:#999}.currency-note{font-size:9px;color:#666}@media print{body{width:80mm}}</style></head>
+      <body>
+      <div class="center"><h3>${pharmacyName.toUpperCase()}</h3><p class="powered">Powered by ${systemName}</p><p>${pharmacyAddress}</p><p>Tel: ${pharmacyPhone}</p></div>
+      <div class="dashed"></div>
+      <div class="row"><span>Invoice:</span><span class="bold">#${String(sale.id).slice(-8)}</span></div>
+      <div class="row"><span>Date:</span><span>${formatDateTime(sale.date || new Date().toISOString())}</span></div>
+      <div class="row"><span>Currency:</span><span>${currency}</span></div>
+      <div class="row"><span>Payment:</span><span>${sale.paymentMethod || "Cash"}</span></div>
+      <div class="dashed"></div>
+      ${(sale.items || []).map((item) => `<div class="row"><span>${item.name}</span><span>${item.quantity} x ${formatCurrency(item.selling_price, currency)} = ${formatCurrency(item.selling_price * item.quantity, currency)}</span></div>`).join("")}
+      <div class="dashed"></div>
+      <div class="row bold" style="font-size:12px"><span>TOTAL:</span><span>${formatCurrency(sale.total || 0, currency)}</span></div>
+      ${showBothCurrencies ? `<div class="currency-note center">(${totalInOther})</div>` : ""}
+      <div class="dashed"></div>
+      <div class="center"><p class="bold">${receiptFooter}</p></div>
+      <script>window.onload=function(){window.print();setTimeout(function(){window.close();},500);};</script>
+      </body></html>
     `);
-
     printWindow.document.close();
-
-    // Close receipt after a short delay
     setTimeout(() => {
       if (onClose) onClose();
-    }, 1500);
+    }, 1000);
   };
 
   return (
@@ -82,10 +66,7 @@ export function ReceiptModal({ sale, onClose }) {
         zIndex: 99999,
       }}
       onClick={(e) => {
-        // Close when clicking the dark background
-        if (e.target === e.currentTarget) {
-          onClose();
-        }
+        if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
@@ -100,7 +81,6 @@ export function ReceiptModal({ sale, onClose }) {
           boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
         }}
       >
-        {/* Header */}
         <div
           style={{
             padding: "16px",
@@ -154,8 +134,6 @@ export function ReceiptModal({ sale, onClose }) {
             </button>
           </div>
         </div>
-
-        {/* Receipt Content */}
         <div style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
           <div
             style={{
@@ -172,16 +150,18 @@ export function ReceiptModal({ sale, onClose }) {
                 margin: "0 0 4px 0",
               }}
             >
-              PHARMASYS PHARMACY
+              {pharmacyName.toUpperCase()}
             </h3>
-            <p style={{ fontSize: "12px", color: "#666", margin: "2px 0" }}>
-              123 Health Street, Medical District
+            <p style={{ fontSize: "9px", color: "#999", margin: "0 0 8px 0" }}>
+              Powered by {systemName}
             </p>
             <p style={{ fontSize: "12px", color: "#666", margin: "2px 0" }}>
-              Tel: +1 234-567-8900
+              {pharmacyAddress}
+            </p>
+            <p style={{ fontSize: "12px", color: "#666", margin: "2px 0" }}>
+              Tel: {pharmacyPhone}
             </p>
           </div>
-
           <div style={{ fontSize: "12px", marginBottom: "12px" }}>
             <div
               style={{
@@ -214,6 +194,16 @@ export function ReceiptModal({ sale, onClose }) {
                 margin: "2px 0",
               }}
             >
+              <span style={{ color: "#666" }}>Currency:</span>
+              <span style={{ fontWeight: "bold" }}>{currency}</span>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                margin: "2px 0",
+              }}
+            >
               <span style={{ color: "#666" }}>Cashier:</span>
               <span>{sale.cashier || "Staff"}</span>
             </div>
@@ -230,7 +220,6 @@ export function ReceiptModal({ sale, onClose }) {
               </span>
             </div>
           </div>
-
           <div
             style={{
               borderTop: "1px dashed #ddd",
@@ -253,13 +242,12 @@ export function ReceiptModal({ sale, onClose }) {
                 <span style={{ width: "60px", textAlign: "center" }}>
                   x{item.quantity}
                 </span>
-                <span style={{ width: "70px", textAlign: "right" }}>
-                  {formatCurrency(item.selling_price * item.quantity)}
+                <span style={{ width: "80px", textAlign: "right" }}>
+                  {formatCurrency(item.selling_price * item.quantity, currency)}
                 </span>
               </div>
             ))}
           </div>
-
           <div style={{ fontSize: "12px" }}>
             <div
               style={{
@@ -269,7 +257,7 @@ export function ReceiptModal({ sale, onClose }) {
               }}
             >
               <span style={{ color: "#666" }}>Subtotal:</span>
-              <span>{formatCurrency(sale.subtotal || 0)}</span>
+              <span>{formatCurrency(sale.subtotal || 0, currency)}</span>
             </div>
             <div
               style={{
@@ -279,7 +267,7 @@ export function ReceiptModal({ sale, onClose }) {
               }}
             >
               <span style={{ color: "#666" }}>Tax (5%):</span>
-              <span>{formatCurrency(sale.tax || 0)}</span>
+              <span>{formatCurrency(sale.tax || 0, currency)}</span>
             </div>
             {sale.discount > 0 && (
               <div
@@ -291,12 +279,11 @@ export function ReceiptModal({ sale, onClose }) {
               >
                 <span style={{ color: "#666" }}>Discount:</span>
                 <span style={{ color: "#ef4444" }}>
-                  -{formatCurrency(sale.discount)}
+                  -{formatCurrency(sale.discount, currency)}
                 </span>
               </div>
             )}
           </div>
-
           <div
             style={{
               borderTop: "1px dashed #ddd",
@@ -313,10 +300,21 @@ export function ReceiptModal({ sale, onClose }) {
               }}
             >
               <span>TOTAL:</span>
-              <span>{formatCurrency(sale.total || 0)}</span>
+              <span>{formatCurrency(sale.total || 0, currency)}</span>
             </div>
+            {showBothCurrencies && (
+              <div
+                style={{
+                  textAlign: "right",
+                  fontSize: "10px",
+                  color: "#999",
+                  marginTop: "4px",
+                }}
+              >
+                ({totalInOther})
+              </div>
+            )}
           </div>
-
           <div
             style={{
               textAlign: "center",
@@ -328,10 +326,7 @@ export function ReceiptModal({ sale, onClose }) {
             <p
               style={{ fontWeight: "bold", fontSize: "12px", margin: "2px 0" }}
             >
-              Thank You!
-            </p>
-            <p style={{ color: "#666", fontSize: "11px", margin: "2px 0" }}>
-              Visit us again
+              {receiptFooter}
             </p>
           </div>
         </div>

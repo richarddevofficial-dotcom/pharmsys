@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { useSettingsStore } from "@/store/settingsStore";
 import { Store, Bell, Shield, Database, Save, Key } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -16,16 +17,22 @@ export default function SettingsPage() {
   const { isLoading: authLoading } = useAuth(true);
   const [activeTab, setActiveTab] = useState("general");
 
-  const [settings, setSettings] = useState({
-    pharmacy_name: "My Pharmacy",
-    address: "123 Health Street",
-    phone: "+1 234-567-8900",
-    email: "info@mypharmacy.com",
-    tax_rate: "5",
-    currency: "USD",
-    low_stock_alert: "20",
-    expiry_alert_days: "30",
-    receipt_footer: "Thank you for choosing us!",
+  const settingsStore = useSettingsStore();
+  const { systemName, systemVersion } = settingsStore;
+
+  const [localSettings, setLocalSettings] = useState({
+    pharmacyName: settingsStore.pharmacyName,
+    pharmacyTagline: settingsStore.pharmacyTagline,
+    pharmacyAddress: settingsStore.pharmacyAddress,
+    pharmacyPhone: settingsStore.pharmacyPhone,
+    pharmacyEmail: settingsStore.pharmacyEmail,
+    receiptFooter: settingsStore.receiptFooter,
+    currency: settingsStore.currency,
+    usdToSspRate: settingsStore.usdToSspRate,
+    showBothCurrencies: settingsStore.showBothCurrencies,
+    taxRate: settingsStore.taxRate,
+    lowStockAlert: settingsStore.lowStockAlert,
+    expiryAlertDays: settingsStore.expiryAlertDays,
   });
 
   const [passwordData, setPasswordData] = useState({
@@ -40,6 +47,7 @@ export default function SettingsPage() {
   const handleSaveSettings = () => {
     setIsSaving(true);
     setTimeout(() => {
+      settingsStore.updateSettings(localSettings);
       toast.success("Settings saved successfully!");
       setIsSaving(false);
     }, 800);
@@ -62,7 +70,6 @@ export default function SettingsPage() {
       toast.error("Passwords do not match");
       return;
     }
-
     setIsUpdatingPassword(true);
     setTimeout(() => {
       toast.success("Password updated successfully!");
@@ -92,7 +99,6 @@ export default function SettingsPage() {
         description="Configure your pharmacy system"
         backUrl="/dashboard"
       />
-
       <div className="flex flex-col md:flex-row gap-6">
         <Card className="md:w-64 h-fit">
           <CardContent className="p-2">
@@ -123,15 +129,49 @@ export default function SettingsPage() {
           <CardContent>
             {activeTab === "general" && (
               <div className="space-y-4">
+                <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
+                  <p className="text-sm text-orange-800">
+                    <strong>{systemName}</strong> - Pharmacy Management System{" "}
+                    {systemVersion}
+                  </p>
+                  <p className="text-xs text-orange-600 mt-1">
+                    Configure your pharmacy details below.
+                  </p>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Pharmacy Name</Label>
+                    <Label>Pharmacy Name *</Label>
                     <Input
-                      value={settings.pharmacy_name}
+                      value={localSettings.pharmacyName}
                       onChange={(e) =>
-                        setSettings({
-                          ...settings,
-                          pharmacy_name: e.target.value,
+                        setLocalSettings({
+                          ...localSettings,
+                          pharmacyName: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Tagline</Label>
+                    <Input
+                      value={localSettings.pharmacyTagline}
+                      onChange={(e) =>
+                        setLocalSettings({
+                          ...localSettings,
+                          pharmacyTagline: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>Address</Label>
+                    <Input
+                      value={localSettings.pharmacyAddress}
+                      onChange={(e) =>
+                        setLocalSettings({
+                          ...localSettings,
+                          pharmacyAddress: e.target.value,
                         })
                       }
                     />
@@ -139,9 +179,12 @@ export default function SettingsPage() {
                   <div className="space-y-2">
                     <Label>Phone</Label>
                     <Input
-                      value={settings.phone}
+                      value={localSettings.pharmacyPhone}
                       onChange={(e) =>
-                        setSettings({ ...settings, phone: e.target.value })
+                        setLocalSettings({
+                          ...localSettings,
+                          pharmacyPhone: e.target.value,
+                        })
                       }
                     />
                   </div>
@@ -149,42 +192,78 @@ export default function SettingsPage() {
                     <Label>Email</Label>
                     <Input
                       type="email"
-                      value={settings.email}
+                      value={localSettings.pharmacyEmail}
                       onChange={(e) =>
-                        setSettings({ ...settings, email: e.target.value })
+                        setLocalSettings({
+                          ...localSettings,
+                          pharmacyEmail: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+
+                  {/* Currency Settings */}
+                  <div className="space-y-2">
+                    <Label>Default Currency</Label>
+                    <select
+                      value={localSettings.currency}
+                      onChange={(e) =>
+                        setLocalSettings({
+                          ...localSettings,
+                          currency: e.target.value,
+                        })
+                      }
+                      className="w-full h-10 rounded-md border border-gray-300 px-3 text-sm"
+                    >
+                      <option value="SSP">
+                        SSP (£) - South Sudanese Pound
+                      </option>
+                      <option value="USD">USD ($) - US Dollar</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Exchange Rate (1 USD = ? SSP)</Label>
+                    <Input
+                      type="number"
+                      value={localSettings.usdToSspRate}
+                      onChange={(e) =>
+                        setLocalSettings({
+                          ...localSettings,
+                          usdToSspRate: Number(e.target.value),
+                        })
                       }
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Currency</Label>
-                    <select
-                      value={settings.currency}
-                      onChange={(e) =>
-                        setSettings({ ...settings, currency: e.target.value })
-                      }
-                      className="w-full h-10 rounded-md border border-gray-300 px-3 text-sm"
-                    >
-                      <option value="USD">USD ($)</option>
-                      <option value="EUR">EUR (€)</option>
-                      <option value="GBP">GBP (£)</option>
-                    </select>
+                    <Label>Show Both Currencies</Label>
+                    <div className="flex items-center gap-2 pt-2">
+                      <input
+                        type="checkbox"
+                        checked={localSettings.showBothCurrencies}
+                        onChange={(e) =>
+                          setLocalSettings({
+                            ...localSettings,
+                            showBothCurrencies: e.target.checked,
+                          })
+                        }
+                        className="w-4 h-4 accent-orange-500"
+                      />
+                      <span className="text-sm text-gray-500">
+                        Show SSP/USD conversion on receipts
+                      </span>
+                    </div>
                   </div>
-                  <div className="space-y-2 md:col-span-2">
-                    <Label>Address</Label>
-                    <Input
-                      value={settings.address}
-                      onChange={(e) =>
-                        setSettings({ ...settings, address: e.target.value })
-                      }
-                    />
-                  </div>
+
                   <div className="space-y-2">
                     <Label>Tax Rate (%)</Label>
                     <Input
                       type="number"
-                      value={settings.tax_rate}
+                      value={localSettings.taxRate}
                       onChange={(e) =>
-                        setSettings({ ...settings, tax_rate: e.target.value })
+                        setLocalSettings({
+                          ...localSettings,
+                          taxRate: e.target.value,
+                        })
                       }
                     />
                   </div>
@@ -192,27 +271,25 @@ export default function SettingsPage() {
                     <Label>Low Stock Alert</Label>
                     <Input
                       type="number"
-                      value={settings.low_stock_alert}
+                      value={localSettings.lowStockAlert}
                       onChange={(e) =>
-                        setSettings({
-                          ...settings,
-                          low_stock_alert: e.target.value,
+                        setLocalSettings({
+                          ...localSettings,
+                          lowStockAlert: e.target.value,
                         })
                       }
                     />
                   </div>
                   <div className="space-y-2 md:col-span-2">
-                    <Label>Receipt Footer</Label>
-                    <textarea
-                      value={settings.receipt_footer}
+                    <Label>Receipt Footer Message</Label>
+                    <Input
+                      value={localSettings.receiptFooter}
                       onChange={(e) =>
-                        setSettings({
-                          ...settings,
-                          receipt_footer: e.target.value,
+                        setLocalSettings({
+                          ...localSettings,
+                          receiptFooter: e.target.value,
                         })
                       }
-                      rows={2}
-                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                     />
                   </div>
                 </div>
@@ -228,7 +305,6 @@ export default function SettingsPage() {
                 </Button>
               </div>
             )}
-
             {activeTab === "notifications" && (
               <div className="space-y-4">
                 <p className="text-gray-500">
@@ -252,24 +328,19 @@ export default function SettingsPage() {
                     />
                   </div>
                 ))}
-                <Button
-                  onClick={() =>
-                    toast.success("Notification preferences saved!")
-                  }
-                >
+                <Button onClick={() => toast.success("Preferences saved!")}>
                   <Save className="h-4 w-4 mr-2" />
                   Save Preferences
                 </Button>
               </div>
             )}
-
             {activeTab === "security" && (
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label>Current Password</Label>
                   <Input
                     type="password"
-                    placeholder="Enter current password"
+                    placeholder="Current password"
                     value={passwordData.currentPassword}
                     onChange={(e) =>
                       setPasswordData({
@@ -283,7 +354,7 @@ export default function SettingsPage() {
                   <Label>New Password</Label>
                   <Input
                     type="password"
-                    placeholder="Enter new password (min 6 characters)"
+                    placeholder="New password (min 6 chars)"
                     value={passwordData.newPassword}
                     onChange={(e) =>
                       setPasswordData({
@@ -294,10 +365,10 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Confirm New Password</Label>
+                  <Label>Confirm Password</Label>
                   <Input
                     type="password"
-                    placeholder="Confirm new password"
+                    placeholder="Confirm password"
                     value={passwordData.confirmPassword}
                     onChange={(e) =>
                       setPasswordData({
@@ -312,10 +383,7 @@ export default function SettingsPage() {
                   disabled={isUpdatingPassword}
                 >
                   {isUpdatingPassword ? (
-                    <div className="flex items-center gap-2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      Updating...
-                    </div>
+                    "Updating..."
                   ) : (
                     <>
                       <Key className="h-4 w-4 mr-2" />
@@ -325,7 +393,6 @@ export default function SettingsPage() {
                 </Button>
               </div>
             )}
-
             {activeTab === "backup" && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
@@ -343,9 +410,7 @@ export default function SettingsPage() {
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                   <div>
                     <p className="font-medium">Export Data</p>
-                    <p className="text-sm text-gray-500">
-                      Download all data as CSV
-                    </p>
+                    <p className="text-sm text-gray-500">Download all data</p>
                   </div>
                   <Button
                     variant="outline"

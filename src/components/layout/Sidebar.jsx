@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { useSettingsStore } from "@/store/settingsStore";
 import {
   LayoutDashboard,
   Pill,
@@ -20,7 +21,6 @@ import {
   FileText,
   ShoppingBag,
   X,
-  User,
 } from "lucide-react";
 
 const navigation = [
@@ -35,49 +35,46 @@ const navigation = [
   { name: "Customers", href: "/customers", icon: Users },
   { name: "Reports", href: "/reports", icon: BarChart3 },
   { name: "Notifications", href: "/notifications", icon: Bell },
-  { name: "Users", href: "/users", icon: User },
+  { name: "Users", href: "/users", icon: Users },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { pharmacyName, systemName } = useSettingsStore();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
     <>
-      {/* Mobile Menu Button */}
       <button
         onClick={() => setMobileOpen(true)}
         className="lg:hidden fixed top-4 left-4 z-50 p-2 rounded-lg bg-gray-900 text-white shadow-lg"
       >
         <Menu className="h-5 w-5" />
       </button>
-
-      {/* Mobile Overlay */}
       {mobileOpen && (
         <div
           className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
           onClick={() => setMobileOpen(false)}
         />
       )}
-
-      {/* Sidebar */}
       <div
         className={cn(
-          "fixed lg:static inset-y-0 left-0 z-50 flex flex-col bg-gray-900 text-white transition-all duration-300",
+          "fixed lg:static inset-y-0 left-0 z-50 flex flex-col bg-gray-900 text-white transition-all duration-300 no-print",
           collapsed ? "w-20" : "w-64",
           mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         )}
       >
-        {/* Logo */}
         <div className="flex items-center justify-between px-4 py-4 border-b border-gray-800">
           {!collapsed && (
             <div className="flex items-center gap-2">
               <Pill className="h-8 w-8 text-orange-400" />
               <div>
-                <h1 className="text-lg font-bold">PharmaSys</h1>
-                <p className="text-xs text-gray-400">Management</p>
+                <h1 className="text-lg font-bold">{pharmacyName}</h1>
+                <p className="text-xs text-orange-400">
+                  Powered by {systemName}
+                </p>
               </div>
             </div>
           )}
@@ -100,14 +97,11 @@ export function Sidebar() {
             </button>
           </div>
         </div>
-
-        {/* Navigation Links */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {navigation.map((item) => {
             const isActive =
               pathname === item.href || pathname?.startsWith(item.href + "/");
             const Icon = item.icon;
-
             return (
               <Link
                 key={item.name}
@@ -128,8 +122,6 @@ export function Sidebar() {
             );
           })}
         </nav>
-
-        {/* Bottom Section */}
         <div className="px-3 py-4 border-t border-gray-800">
           <Link
             href="/notifications"
