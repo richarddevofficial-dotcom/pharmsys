@@ -96,16 +96,25 @@
 }
 
 /* ========== PRINT SECTION ========== */
+/* ========== PRINT SECTION ========== */
 @media print {
+  /* Hide everything by default */
   html,
-  body,
-  * {
-    visibility: hidden !important;
+  body {
     background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
+  /* Hide all elements */
+  body > *:not(.receipt-content) {
+    display: none !important;
+  }
+
+  /* Show receipt content */
   .receipt-content,
   .receipt-content * {
+    display: block !important;
     visibility: visible !important;
   }
 
@@ -142,6 +151,7 @@
   .receipt-content * {
     box-shadow: none !important;
     border-radius: 0 !important;
+    background: white !important;
   }
 
   .receipt-content .border-dashed {

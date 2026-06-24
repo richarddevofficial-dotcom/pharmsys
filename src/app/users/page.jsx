@@ -30,6 +30,7 @@ import {
   Phone,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import Link from "next/link";
 
 const mockUsers = [
   {
@@ -125,10 +126,12 @@ export default function UsersPage() {
         description="Manage system users and their roles"
         backUrl="/dashboard"
         actions={
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            Add User
-          </Button>
+          <Link href="/users/add">
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Add User
+            </Button>
+          </Link>
         }
       />
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

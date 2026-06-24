@@ -103,6 +103,7 @@ export default function POSPage() {
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [showReceipt, setShowReceipt] = useState(false);
   const [lastSale, setLastSale] = useState(null);
+  const [lastReceipt, setLastReceipt] = useState(null);
   const [showScanner, setShowScanner] = useState(false);
 
   const filteredMedicines = mockMedicines.filter(
@@ -131,9 +132,9 @@ export default function POSPage() {
     const medicine = mockMedicines.find((m) => m.batch_number === barcode);
     if (medicine) {
       addToCart(medicine);
-      toast.success(`${medicine.name} found and added!`);
+      toast.success(`${medicine.name} found!`);
     } else {
-      toast.error("Medicine not found with this barcode");
+      toast.error("Medicine not found");
     }
   };
 
@@ -142,8 +143,8 @@ export default function POSPage() {
       cart
         .map((item) => {
           if (item.id === id) {
-            const newQty = item.quantity + change;
-            return newQty > 0 ? { ...item, quantity: newQty } : item;
+            const q = item.quantity + change;
+            return q > 0 ? { ...item, quantity: q } : item;
           }
           return item;
         })
@@ -153,20 +154,14 @@ export default function POSPage() {
 
   const removeFromCart = (id) => {
     setCart(cart.filter((item) => item.id !== id));
-    toast.success("Item removed from cart");
   };
-
   const clearCart = () => {
     setCart([]);
     setDiscount(0);
     setShowPayment(false);
-    toast.success("Cart cleared");
   };
 
-  const subtotal = cart.reduce(
-    (sum, item) => sum + item.selling_price * item.quantity,
-    0,
-  );
+  const subtotal = cart.reduce((s, i) => s + i.selling_price * i.quantity, 0);
   const tax = subtotal * 0.05;
   const discountAmount = subtotal * (discount / 100);
   const total = subtotal + tax - discountAmount;
@@ -191,8 +186,16 @@ export default function POSPage() {
     };
 
     setLastSale(invoice);
+    setLastReceipt(invoice);
     setShowReceipt(true);
-    toast.success(`Sale completed! Total: ${formatCurrency(total)}`);
+
+    // Show success toast FIRST
+    toast.success(`✅ Sale completed! Total: ${formatCurrency(total)}`, {
+      duration: 4000,
+      position: "top-center",
+    });
+
+    // Then clear cart
     setCart([]);
     setDiscount(0);
     setShowPayment(false);
@@ -208,7 +211,19 @@ export default function POSPage() {
         description="Process sales transactions"
         backUrl="/dashboard"
         actions={
-          <Button variant="outline" size="sm" className="hidden md:flex">
+          <Button
+            variant="outline"
+            size="sm"
+            className="hidden md:flex"
+            onClick={() => {
+              if (lastReceipt) {
+                setLastSale(lastReceipt);
+                setShowReceipt(true);
+              } else {
+                toast.error("No previous receipt found");
+              }
+            }}
+          >
             <Printer className="h-4 w-4 mr-2" />
             Last Receipt
           </Button>
@@ -216,14 +231,13 @@ export default function POSPage() {
       />
 
       <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 min-h-0">
-        {/* Left Side - Products */}
+        {/* Products */}
         <div className="flex-1 space-y-4 min-w-0">
-          {/* Search with Barcode Scanner - ONLY ONE SEARCH BOX */}
           <div className="flex gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
-                placeholder="Search medicines or scan barcode..."
+                placeholder="Search medicines..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-10"
@@ -233,51 +247,31 @@ export default function POSPage() {
               variant="outline"
               size="icon"
               onClick={() => setShowScanner(true)}
-              title="Scan Barcode"
-              className="flex-shrink-0"
             >
               <Scan className="h-4 w-4" />
             </Button>
           </div>
-
-          {/* Medicine Grid */}
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2 md:gap-3 overflow-y-auto max-h-[calc(100vh-380px)] lg:max-h-[calc(100vh-300px)]">
-            {filteredMedicines.length === 0 ? (
-              <div className="col-span-full text-center py-8 text-gray-400">
-                <Search className="h-12 w-12 mx-auto mb-2" />
-                <p>No medicines found</p>
-              </div>
-            ) : (
-              filteredMedicines.map((medicine) => (
-                <button
-                  key={medicine.id}
-                  onClick={() => addToCart(medicine)}
-                  className="p-3 md:p-4 text-left border rounded-lg hover:border-orange-500 hover:bg-orange-50 transition-all cursor-pointer active:scale-95"
-                >
-                  <h3 className="font-medium text-xs md:text-sm line-clamp-2">
-                    {medicine.name}
-                  </h3>
-                  <p className="text-xs text-gray-500 hidden md:block">
-                    {medicine.generic_name}
-                  </p>
-                  <div className="flex justify-between items-center mt-2">
-                    <span className="text-sm md:text-lg font-bold text-orange-600">
-                      ${medicine.selling_price.toFixed(2)}
-                    </span>
-                    <Badge
-                      variant="secondary"
-                      className="text-xs hidden md:inline-flex"
-                    >
-                      {medicine.quantity}
-                    </Badge>
-                  </div>
-                </button>
-              ))
-            )}
+            {filteredMedicines.map((med) => (
+              <button
+                key={med.id}
+                onClick={() => addToCart(med)}
+                className="p-3 md:p-4 text-left border rounded-lg hover:border-orange-500 hover:bg-orange-50 transition-all active:scale-95"
+              >
+                <h3 className="font-medium text-xs md:text-sm line-clamp-2">
+                  {med.name}
+                </h3>
+                <div className="flex justify-between items-center mt-2">
+                  <span className="text-sm md:text-lg font-bold text-orange-600">
+                    ${med.selling_price.toFixed(2)}
+                  </span>
+                </div>
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Right Side - Cart */}
+        {/* Cart */}
         <div className="w-full lg:w-96 flex flex-col">
           <Card className="flex-1 flex flex-col">
             <CardHeader className="pb-3">
@@ -300,61 +294,52 @@ export default function POSPage() {
               </div>
             </CardHeader>
             <CardContent className="flex-1 flex flex-col p-0">
-              <div className="flex-1 space-y-1 overflow-y-auto px-6 max-h-[calc(100vh-500px)] lg:max-h-[calc(100vh-420px)]">
-                {cart.length === 0 ? (
-                  <div className="text-center py-8 text-gray-400">
-                    <ShoppingCart className="h-12 w-12 mx-auto mb-2" />
-                    <p>Cart is empty</p>
-                    <p className="text-sm">Click on medicines to add them</p>
-                  </div>
-                ) : (
-                  cart.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate">
-                          {item.name}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          ${item.selling_price.toFixed(2)} x {item.quantity}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => updateQuantity(item.id, -1)}
-                        >
-                          <Minus className="h-3 w-3" />
-                        </Button>
-                        <span className="w-8 text-center text-sm font-medium">
-                          {item.quantity}
-                        </span>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => updateQuantity(item.id, 1)}
-                        >
-                          <Plus className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-red-500"
-                          onClick={() => removeFromCart(item.id)}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
+              <div className="flex-1 space-y-1 overflow-y-auto px-6 max-h-[calc(100vh-500px)]">
+                {cart.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg"
+                  >
+                    <div className="flex-1">
+                      <p className="font-medium text-sm truncate">
+                        {item.name}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        ${item.selling_price.toFixed(2)} x {item.quantity}
+                      </p>
                     </div>
-                  ))
-                )}
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => updateQuantity(item.id, -1)}
+                      >
+                        <Minus className="h-3 w-3" />
+                      </Button>
+                      <span className="w-8 text-center text-sm font-medium">
+                        {item.quantity}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => updateQuantity(item.id, 1)}
+                      >
+                        <Plus className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-red-500"
+                        onClick={() => removeFromCart(item.id)}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
               </div>
-
               {cart.length > 0 && (
                 <div className="border-t px-6 py-4 space-y-2 bg-white">
                   <div className="flex justify-between text-sm">
@@ -376,8 +361,6 @@ export default function POSPage() {
                         )
                       }
                       className="w-20 h-8 text-sm"
-                      min="0"
-                      max="100"
                     />
                     <span className="text-sm text-red-500">
                       -{formatCurrency(discountAmount)}
@@ -389,7 +372,6 @@ export default function POSPage() {
                       {formatCurrency(total)}
                     </span>
                   </div>
-
                   {!showPayment ? (
                     <Button
                       className="w-full mt-2 bg-orange-500 hover:bg-orange-600"
@@ -459,15 +441,21 @@ export default function POSPage() {
         </div>
       </div>
 
-      {/* Barcode Scanner Modal */}
       <BarcodeScanner
         isOpen={showScanner}
         onClose={() => setShowScanner(false)}
         onScan={handleBarcodeScan}
       />
 
-      {/* Receipt Modal */}
-      <ReceiptModal sale={lastSale} onClose={() => setShowReceipt(false)} />
+      {showReceipt && lastSale && (
+        <ReceiptModal
+          sale={lastSale}
+          onClose={() => {
+            setShowReceipt(false);
+            setLastSale(null);
+          }}
+        />
+      )}
     </div>
   );
 }

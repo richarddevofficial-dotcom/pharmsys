@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
+import { useState } from "react";
 import { Printer, X } from "lucide-react";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 
@@ -8,124 +8,331 @@ export function ReceiptModal({ sale, onClose }) {
   if (!sale) return null;
 
   const handlePrint = () => {
-    window.print();
+    const printWindow = window.open("", "_blank", "width=400,height=600");
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Receipt</title>
+          <style>
+            body { font-family: 'Courier New', monospace; font-size: 10px; width: 80mm; margin: 0 auto; padding: 5mm; }
+            .center { text-align: center; }
+            .dashed { border-top: 1px dashed #000; padding: 5px 0; margin: 5px 0; }
+            .row { display: flex; justify-content: space-between; margin: 2px 0; }
+            .bold { font-weight: bold; }
+            h3 { font-size: 12px; margin: 0 0 4px 0; }
+            @media print { body { width: 80mm; } }
+          </style>
+        </head>
+        <body>
+          <div class="center"><h3>PHARMASYS PHARMACY</h3><p>123 Health Street</p></div>
+          <div class="dashed"></div>
+          <div class="row"><span>Invoice:</span><span class="bold">#${String(sale.id).slice(-8)}</span></div>
+          <div class="row"><span>Date:</span><span>${formatDateTime(sale.date || new Date().toISOString())}</span></div>
+          <div class="row"><span>Payment:</span><span>${sale.paymentMethod || "Cash"}</span></div>
+          <div class="dashed"></div>
+          ${(sale.items || [])
+            .map(
+              (item) => `
+            <div class="row"><span>${item.name}</span><span>${item.quantity} x ${formatCurrency(item.selling_price)} = ${formatCurrency(item.selling_price * item.quantity)}</span></div>
+          `,
+            )
+            .join("")}
+          <div class="dashed"></div>
+          <div class="row bold" style="font-size:12px"><span>TOTAL:</span><span>${formatCurrency(sale.total || 0)}</span></div>
+          <div class="dashed"></div>
+          <div class="center"><p class="bold">Thank You!</p></div>
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(function() { window.close(); }, 1000);
+            };
+            // After print, notify parent window
+            window.onafterprint = function() {
+              if (window.opener && !window.opener.closed) {
+                window.opener.postMessage('receiptPrinted', '*');
+              }
+              window.close();
+            };
+          </script>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+
+    // Close receipt after a short delay
+    setTimeout(() => {
+      if (onClose) onClose();
+    }, 1500);
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 no-print">
-      <div className="bg-white rounded-lg shadow-xl max-w-sm w-full mx-4 max-h-[90vh] overflow-y-auto">
-        {/* Header - Hidden when printing */}
-        <div className="p-4 border-b flex items-center justify-between no-print">
-          <h2 className="text-lg font-bold">Receipt Preview</h2>
-          <div className="flex gap-2 no-print">
-            <Button
-              variant="outline"
-              size="sm"
+    <div
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: "rgba(0,0,0,0.5)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 99999,
+      }}
+      onClick={(e) => {
+        // Close when clicking the dark background
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div
+        style={{
+          backgroundColor: "white",
+          borderRadius: "8px",
+          maxWidth: "400px",
+          width: "90%",
+          maxHeight: "90vh",
+          display: "flex",
+          flexDirection: "column",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
+        }}
+      >
+        {/* Header */}
+        <div
+          style={{
+            padding: "16px",
+            borderBottom: "1px solid #e5e5e5",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexShrink: 0,
+          }}
+        >
+          <h2 style={{ margin: 0, fontSize: "18px", fontWeight: "bold" }}>
+            Receipt Preview
+          </h2>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button
               onClick={handlePrint}
-              className="no-print"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px",
+                padding: "6px 12px",
+                border: "1px solid #d1d5db",
+                borderRadius: "6px",
+                backgroundColor: "white",
+                cursor: "pointer",
+                fontSize: "14px",
+              }}
             >
-              <Printer className="h-4 w-4 mr-2" />
-              Print
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClose}
-              className="no-print"
+              <Printer size={16} /> Print
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onClose();
+              }}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "6px",
+                border: "none",
+                borderRadius: "6px",
+                backgroundColor: "transparent",
+                cursor: "pointer",
+                fontSize: "18px",
+                color: "#6b7280",
+              }}
+              title="Close"
             >
-              <X className="h-4 w-4" />
-            </Button>
+              ✕
+            </button>
           </div>
         </div>
 
-        {/* Receipt Content - This gets printed */}
-        <div className="p-4 receipt-content">
-          {/* Store Header */}
-          <div className="text-center border-b border-dashed pb-3 mb-3">
-            <h3 className="font-bold text-base">PHARMASYS PHARMACY</h3>
-            <p className="text-xs">123 Health Street, Medical District</p>
-            <p className="text-xs">Tel: +1 234-567-8900</p>
-            <p className="text-xs">Email: info@pharmasys.com</p>
+        {/* Receipt Content */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
+          <div
+            style={{
+              textAlign: "center",
+              borderBottom: "1px dashed #ddd",
+              paddingBottom: "12px",
+              marginBottom: "12px",
+            }}
+          >
+            <h3
+              style={{
+                fontWeight: "bold",
+                fontSize: "16px",
+                margin: "0 0 4px 0",
+              }}
+            >
+              PHARMASYS PHARMACY
+            </h3>
+            <p style={{ fontSize: "12px", color: "#666", margin: "2px 0" }}>
+              123 Health Street, Medical District
+            </p>
+            <p style={{ fontSize: "12px", color: "#666", margin: "2px 0" }}>
+              Tel: +1 234-567-8900
+            </p>
           </div>
 
-          {/* Sale Info */}
-          <div className="text-xs space-y-1 mb-3">
-            <div className="flex justify-between">
-              <span>Invoice:</span>
-              <span className="font-medium">#{String(sale.id).slice(-8)}</span>
+          <div style={{ fontSize: "12px", marginBottom: "12px" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                margin: "2px 0",
+              }}
+            >
+              <span style={{ color: "#666" }}>Invoice:</span>
+              <span style={{ fontWeight: "bold" }}>
+                #{String(sale.id).slice(-8)}
+              </span>
             </div>
-            <div className="flex justify-between">
-              <span>Date:</span>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                margin: "2px 0",
+              }}
+            >
+              <span style={{ color: "#666" }}>Date:</span>
               <span>
                 {formatDateTime(sale.date || new Date().toISOString())}
               </span>
             </div>
-            <div className="flex justify-between">
-              <span>Cashier:</span>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                margin: "2px 0",
+              }}
+            >
+              <span style={{ color: "#666" }}>Cashier:</span>
               <span>{sale.cashier || "Staff"}</span>
             </div>
-            <div className="flex justify-between">
-              <span>Payment:</span>
-              <span className="capitalize">{sale.paymentMethod || "Cash"}</span>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                margin: "2px 0",
+              }}
+            >
+              <span style={{ color: "#666" }}>Payment:</span>
+              <span style={{ textTransform: "capitalize" }}>
+                {sale.paymentMethod || "Cash"}
+              </span>
             </div>
           </div>
 
-          {/* Items */}
-          <div className="border-t border-b border-dashed py-2 mb-3">
-            <div className="flex justify-between text-xs font-bold mb-1">
-              <span className="w-1/2">Item</span>
-              <span className="w-1/6 text-center">Qty</span>
-              <span className="w-1/6 text-right">Price</span>
-              <span className="w-1/6 text-right">Total</span>
-            </div>
-            {sale.items?.map((item, index) => (
-              <div key={index} className="flex justify-between text-xs py-1">
-                <span className="w-1/2 truncate">{item.name}</span>
-                <span className="w-1/6 text-center">{item.quantity}</span>
-                <span className="w-1/6 text-right">
-                  {formatCurrency(item.selling_price)}
+          <div
+            style={{
+              borderTop: "1px dashed #ddd",
+              borderBottom: "1px dashed #ddd",
+              padding: "8px 0",
+              marginBottom: "12px",
+            }}
+          >
+            {(sale.items || []).map((item, index) => (
+              <div
+                key={index}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  fontSize: "12px",
+                  margin: "2px 0",
+                }}
+              >
+                <span style={{ flex: 1 }}>{item.name}</span>
+                <span style={{ width: "60px", textAlign: "center" }}>
+                  x{item.quantity}
                 </span>
-                <span className="w-1/6 text-right">
+                <span style={{ width: "70px", textAlign: "right" }}>
                   {formatCurrency(item.selling_price * item.quantity)}
                 </span>
               </div>
             ))}
           </div>
 
-          {/* Totals */}
-          <div className="text-xs space-y-1 mb-3">
-            <div className="flex justify-between">
-              <span>Subtotal:</span>
+          <div style={{ fontSize: "12px" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                margin: "2px 0",
+              }}
+            >
+              <span style={{ color: "#666" }}>Subtotal:</span>
               <span>{formatCurrency(sale.subtotal || 0)}</span>
             </div>
-            <div className="flex justify-between">
-              <span>Tax (5%):</span>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                margin: "2px 0",
+              }}
+            >
+              <span style={{ color: "#666" }}>Tax (5%):</span>
               <span>{formatCurrency(sale.tax || 0)}</span>
             </div>
             {sale.discount > 0 && (
-              <div className="flex justify-between">
-                <span>Discount ({sale.discountPercent || 0}%):</span>
-                <span>-{formatCurrency(sale.discount)}</span>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  margin: "2px 0",
+                }}
+              >
+                <span style={{ color: "#666" }}>Discount:</span>
+                <span style={{ color: "#ef4444" }}>
+                  -{formatCurrency(sale.discount)}
+                </span>
               </div>
             )}
           </div>
 
-          {/* Total */}
-          <div className="border-t border-dashed pt-2 mb-3">
-            <div className="flex justify-between font-bold text-sm">
+          <div
+            style={{
+              borderTop: "1px dashed #ddd",
+              paddingTop: "8px",
+              marginTop: "8px",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                fontWeight: "bold",
+                fontSize: "14px",
+              }}
+            >
               <span>TOTAL:</span>
               <span>{formatCurrency(sale.total || 0)}</span>
             </div>
           </div>
 
-          {/* Footer */}
-          <div className="text-center text-xs border-t border-dashed pt-3">
-            <p className="font-medium">Thank You!</p>
-            <p className="text-gray-500 mt-1">Visit us again</p>
-            <p className="text-gray-400 mt-1">
-              Keep medicines away from children
+          <div
+            style={{
+              textAlign: "center",
+              borderTop: "1px dashed #ddd",
+              paddingTop: "12px",
+              marginTop: "12px",
+            }}
+          >
+            <p
+              style={{ fontWeight: "bold", fontSize: "12px", margin: "2px 0" }}
+            >
+              Thank You!
             </p>
-            <p className="text-gray-300 mt-2">---</p>
+            <p style={{ color: "#666", fontSize: "11px", margin: "2px 0" }}>
+              Visit us again
+            </p>
           </div>
         </div>
       </div>
