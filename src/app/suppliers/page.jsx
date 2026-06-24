@@ -7,6 +7,7 @@ import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Table,
   TableBody,
@@ -29,8 +30,9 @@ import {
   Building2,
 } from "lucide-react";
 import Link from "next/link";
+import toast from "react-hot-toast";
 
-const mockSuppliers = [
+const initialSuppliers = [
   {
     id: 1,
     name: "MedSupply Co.",
@@ -76,14 +78,22 @@ const mockSuppliers = [
 export default function SuppliersPage() {
   const { isLoading: authLoading } = useAuth(true);
   const [search, setSearch] = useState("");
-  const [suppliers] = useState(mockSuppliers);
+  const [suppliers, setSuppliers] = useState(initialSuppliers);
+  const [deleteId, setDeleteId] = useState(null);
 
   const filteredSuppliers = suppliers.filter(
     (s) =>
       s.name.toLowerCase().includes(search.toLowerCase()) ||
       s.contact_person.toLowerCase().includes(search.toLowerCase()) ||
-      s.email.toLowerCase().includes(search.toLowerCase()),
+      s.email.toLowerCase().includes(search.toLowerCase()) ||
+      s.phone.includes(search),
   );
+
+  const handleDelete = () => {
+    setSuppliers(suppliers.filter((s) => s.id !== deleteId));
+    toast.success("Supplier deleted successfully!");
+    setDeleteId(null);
+  };
 
   if (authLoading) return <LoadingSpinner />;
 
@@ -219,10 +229,18 @@ export default function SuppliersPage() {
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-1">
-                            <Button variant="ghost" size="sm">
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="sm">
+                            {/* Edit Button - Links to edit page */}
+                            <Link href={`/suppliers/${s.id}/edit`}>
+                              <Button variant="ghost" size="sm">
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </Link>
+                            {/* Delete Button - Opens confirmation */}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setDeleteId(s.id)}
+                            >
                               <Trash2 className="h-4 w-4 text-red-500" />
                             </Button>
                           </div>
@@ -236,6 +254,15 @@ export default function SuppliersPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={!!deleteId}
+        onClose={() => setDeleteId(null)}
+        onConfirm={handleDelete}
+        title="Delete Supplier"
+        message="Are you sure you want to delete this supplier? This action cannot be undone."
+      />
     </div>
   );
 }

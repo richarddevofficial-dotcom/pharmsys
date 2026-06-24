@@ -5,7 +5,7 @@ import { Providers } from "./providers";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
-  title: "Pharmacy Management System",
+  title: "Pharmsys Management",
   description: "Modern pharmacy management solution",
 };
 

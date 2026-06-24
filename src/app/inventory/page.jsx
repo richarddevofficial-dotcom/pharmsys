@@ -144,7 +144,10 @@ export default function InventoryPage() {
       />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="cursor-pointer hover:shadow-md transition-shadow">
+        <Card
+          className="cursor-pointer hover:shadow-md transition-shadow"
+          onClick={() => toast.success("Stock In feature coming soon!")}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-green-100 rounded-lg">
@@ -157,7 +160,10 @@ export default function InventoryPage() {
             </div>
           </CardContent>
         </Card>
-        <Card className="cursor-pointer hover:shadow-md transition-shadow">
+        <Card
+          className="cursor-pointer hover:shadow-md transition-shadow"
+          onClick={() => toast.success("Stock Out feature coming soon!")}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-red-100 rounded-lg">
@@ -170,7 +176,10 @@ export default function InventoryPage() {
             </div>
           </CardContent>
         </Card>
-        <Card className="cursor-pointer hover:shadow-md transition-shadow">
+        <Card
+          className="cursor-pointer hover:shadow-md transition-shadow"
+          onClick={() => toast.success("Adjust Stock feature coming soon!")}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-yellow-100 rounded-lg">

@@ -7,6 +7,7 @@ import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Table,
   TableBody,
@@ -31,8 +32,9 @@ import {
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import Link from "next/link";
+import toast from "react-hot-toast";
 
-const mockCustomers = [
+const initialCustomers = [
   {
     id: 1,
     first_name: "John",
@@ -86,7 +88,8 @@ const mockCustomers = [
 export default function CustomersPage() {
   const { isLoading: authLoading } = useAuth(true);
   const [search, setSearch] = useState("");
-  const [customers] = useState(mockCustomers);
+  const [customers, setCustomers] = useState(initialCustomers);
+  const [deleteId, setDeleteId] = useState(null);
 
   const filteredCustomers = customers.filter(
     (c) =>
@@ -99,6 +102,12 @@ export default function CustomersPage() {
 
   const totalRevenue = customers.reduce((s, c) => s + c.total_spent, 0);
   const totalPurchases = customers.reduce((s, c) => s + c.total_purchases, 0);
+
+  const handleDelete = () => {
+    setCustomers(customers.filter((c) => c.id !== deleteId));
+    toast.success("Customer deleted successfully!");
+    setDeleteId(null);
+  };
 
   if (authLoading) return <LoadingSpinner />;
 
@@ -261,10 +270,18 @@ export default function CustomersPage() {
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-1">
-                            <Button variant="ghost" size="sm">
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="sm">
+                            {/* Edit Button */}
+                            <Link href={`/customers/${c.id}/edit`}>
+                              <Button variant="ghost" size="sm">
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </Link>
+                            {/* Delete Button */}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setDeleteId(c.id)}
+                            >
                               <Trash2 className="h-4 w-4 text-red-500" />
                             </Button>
                           </div>
@@ -278,6 +295,15 @@ export default function CustomersPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={!!deleteId}
+        onClose={() => setDeleteId(null)}
+        onConfirm={handleDelete}
+        title="Delete Customer"
+        message="Are you sure you want to delete this customer? This action cannot be undone."
+      />
     </div>
   );
 }
