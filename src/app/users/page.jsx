@@ -110,11 +110,20 @@ export default function UsersPage() {
     return roles[role] || { label: role, color: "bg-gray-100 text-gray-800" };
   };
 
+  // FIXED: Toggle user active/inactive status
   const toggleUserStatus = (id) => {
     setUsers(
-      users.map((u) => (u.id === id ? { ...u, is_active: !u.is_active } : u)),
+      users.map((u) => {
+        if (u.id === id) {
+          const newStatus = !u.is_active;
+          toast.success(
+            `User ${newStatus ? "activated" : "deactivated"} successfully!`,
+          );
+          return { ...u, is_active: newStatus };
+        }
+        return u;
+      }),
     );
-    toast.success("Status updated!");
   };
 
   // Open edit modal
@@ -273,8 +282,12 @@ export default function UsersPage() {
                         <TableRow key={u.id}>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                                <span className="font-bold text-blue-600 text-xs">
+                              <div
+                                className={`w-8 h-8 rounded-full flex items-center justify-center ${u.is_active ? "bg-blue-100" : "bg-gray-200"}`}
+                              >
+                                <span
+                                  className={`font-bold text-xs ${u.is_active ? "text-blue-600" : "text-gray-400"}`}
+                                >
                                   {u.first_name[0]}
                                   {u.last_name[0]}
                                 </span>
@@ -307,11 +320,29 @@ export default function UsersPage() {
                             </Badge>
                           </TableCell>
                           <TableCell>
+                            {/* FIXED: Status toggle button */}
                             <button
                               onClick={() => toggleUserStatus(u.id)}
-                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium cursor-pointer ${u.is_active ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}
+                              className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium cursor-pointer transition-all hover:shadow ${
+                                u.is_active
+                                  ? "bg-green-100 text-green-800 hover:bg-red-100 hover:text-red-800"
+                                  : "bg-red-100 text-red-800 hover:bg-green-100 hover:bg-green-800"
+                              }`}
+                              title={
+                                u.is_active
+                                  ? "Click to deactivate"
+                                  : "Click to activate"
+                              }
                             >
-                              {u.is_active ? "Active" : "Inactive"}
+                              {u.is_active ? (
+                                <>
+                                  <UserCheck className="h-3 w-3" /> Active
+                                </>
+                              ) : (
+                                <>
+                                  <UserX className="h-3 w-3" /> Inactive
+                                </>
+                              )}
                             </button>
                           </TableCell>
                           <TableCell className="text-sm text-gray-500 whitespace-nowrap">
