@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useAuth } from "@/hooks/useAuth";
+import { useQuery } from "@tanstack/react-query";
+import api from "@/lib/axios";
 import { PageHeader } from "@/components/ui/page-header";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,189 +42,188 @@ import {
   Pie,
   Cell,
 } from "recharts";
-import { useReactTable } from "@tanstack/react-table";
-
-const weeklyData = [
-  { day: "Mon", sales: 1200 },
-  { day: "Tue", sales: 1800 },
-  { day: "Wed", sales: 1400 },
-  { day: "Thu", sales: 2200 },
-  { day: "Fri", sales: 2800 },
-  { day: "Sat", sales: 3200 },
-  { day: "Sun", sales: 1900 },
-];
-
-const monthlyData = [
-  { day: "Week 1", sales: 8500 },
-  { day: "Week 2", sales: 9200 },
-  { day: "Week 3", sales: 7800 },
-  { day: "Week 4", sales: 10500 },
-];
-
-const yearlyData = [
-  { day: "Jan", sales: 28000 },
-  { day: "Feb", sales: 25000 },
-  { day: "Mar", sales: 32000 },
-  { day: "Apr", sales: 30000 },
-  { day: "May", sales: 35000 },
-  { day: "Jun", sales: 38000 },
-  { day: "Jul", sales: 34000 },
-  { day: "Aug", sales: 36000 },
-  { day: "Sep", sales: 33000 },
-  { day: "Oct", sales: 37000 },
-  { day: "Nov", sales: 40000 },
-  { day: "Dec", sales: 42000 },
-];
-
-const topMedicines = [
-  { name: "Paracetamol", revenue: 868.55 },
-  { name: "Amoxicillin", revenue: 1112.5 },
-  { name: "Vitamin C", revenue: 835.24 },
-  { name: "Ibuprofen", revenue: 584.35 },
-  { name: "Omeprazole", revenue: 675.0 },
-];
 
 const COLORS = ["#f97316", "#ea580c", "#fdba74", "#c2410c", "#9a3412"];
 
 export default function ReportsPage() {
   const { isLoading: authLoading } = useAuth(true);
-  useRoleAccess();
   const [dateRange, setDateRange] = useState("week");
   const [generatedReport, setGeneratedReport] = useState(null);
-  const [showFilter, setShowFilter] = useState(false);
-  const [filterType, setFilterType] = useState("all");
 
-  // Get data based on date range
-  const getSalesData = () => {
-    switch (dateRange) {
-      case "week":
-        return weeklyData;
-      case "month":
-        return monthlyData;
-      case "year":
-        return yearlyData;
-      default:
-        return weeklyData;
-    }
-  };
+  // Fetch dashboard stats
+  const { data: dashboardData } = useQuery({
+    queryKey: ["dashboard-stats"],
+    queryFn: async () => {
+      const res = await api.get("/reports/dashboard/");
+      return res.data;
+    },
+  });
 
-  const currentData = getSalesData();
-  const totalRevenue = currentData.reduce((s, d) => s + d.sales, 0);
-  const totalOrders =
-    dateRange === "week" ? 263 : dateRange === "month" ? 1050 : 12600;
-  const avgOrder = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+  // Fetch medicines for reports
+  const { data: medsData } = useQuery({
+    queryKey: ["medicines-report"],
+    queryFn: async () => {
+      const res = await api.get("/medicines/");
+      return res.data;
+    },
+  });
 
-  // Cycle through date ranges
-  const cycleDateRange = () => {
-    if (dateRange === "week") setDateRange("month");
-    else if (dateRange === "month") setDateRange("year");
-    else setDateRange("week");
-    toast.success(
-      `Showing ${dateRange === "week" ? "Monthly" : dateRange === "month" ? "Yearly" : "Weekly"} data`,
-    );
-  };
+  // Fetch sales for reports
+  const { data: salesData } = useQuery({
+    queryKey: ["sales-report"],
+    queryFn: async () => {
+      const res = await api.get("/sales/");
+      return res.data;
+    },
+  });
 
-  // Handle filter
-  const handleFilter = (type) => {
-    setFilterType(type);
-    setShowFilter(false);
-    toast.success(`Filtered by: ${type}`);
-  };
+  const stats = dashboardData || {};
+  const medicines = medsData?.results || [];
+  const sales = salesData?.results || [];
 
-  // Export dashboard data
-  const handleExport = () => {
-    const exportData = currentData.map((d) => ({
-      Period: d.day,
-      Sales: d.sales,
-      Revenue: formatCurrency(d.sales),
-    }));
-    exportToCSV(
-      exportData,
-      `sales-report-${dateRange}-${new Date().toISOString().split("T")[0]}`,
-    );
-    toast.success("Report exported to CSV!");
-  };
+  const weeklySales = stats.weekly_sales || [
+    { day: "Mon", sales: 0 },
+    { day: "Tue", sales: 0 },
+    { day: "Wed", sales: 0 },
+    { day: "Thu", sales: 0 },
+    { day: "Fri", sales: 0 },
+    { day: "Sat", sales: 0 },
+    { day: "Sun", sales: 0 },
+  ];
+  const topMedicines = stats.top_medicines || [];
+  const totalRevenue = sales.reduce(
+    (s, sale) => s + parseFloat(sale.total_amount || 0),
+    0,
+  );
 
-  // Report generators
   const generateSalesReport = () => {
+    const reportData = sales
+      .slice(0, 10)
+      .map((s) => [
+        `#${s.id}`,
+        s.customer_name || "Walk-in",
+        `${s.items?.length || 0} items`,
+        formatCurrency(s.total_amount),
+        s.payment_method,
+        s.currency || "SSP",
+        new Date(s.created_at).toLocaleDateString(),
+      ]);
     setGeneratedReport({
       title: "Sales Report",
-      headers: ["Period", "Orders", "Revenue", "Avg Order"],
-      data: [
-        ["Today", "25", "$1,200", "$48.00"],
-        ["Yesterday", "32", "$1,500", "$46.88"],
-        ["This Week", "180", "$8,400", "$46.67"],
-        ["This Month", "720", "$34,000", "$47.22"],
-        ["Last Month", "650", "$30,000", "$46.15"],
+      headers: [
+        "Invoice",
+        "Customer",
+        "Items",
+        "Total",
+        "Payment",
+        "Currency",
+        "Date",
       ],
+      data: reportData,
       summary: {
-        "Total Orders": "720",
-        "Total Revenue": "$34,000",
-        "Avg Order Value": "$47.22",
-        Growth: "+13.3%",
+        "Total Sales": sales.length,
+        "Total Revenue": formatCurrency(totalRevenue),
+        "Avg Sale": formatCurrency(
+          sales.length > 0 ? totalRevenue / sales.length : 0,
+        ),
       },
     });
     toast.success("Sales report generated!");
   };
 
   const generateInventoryReport = () => {
+    const reportData = medicines.map((m) => [
+      m.name,
+      m.batch_number,
+      m.quantity,
+      m.minimum_stock,
+      new Date(m.expiry_date) < new Date()
+        ? "Expired"
+        : m.quantity <= m.minimum_stock
+          ? "Low Stock"
+          : "In Stock",
+      formatCurrency(m.selling_price * m.quantity),
+    ]);
     setGeneratedReport({
       title: "Inventory Report",
-      headers: ["Medicine", "Quantity", "Min Stock", "Status", "Value"],
-      data: [
-        ["Paracetamol 500mg", "150", "20", "In Stock", "$898.50"],
-        ["Amoxicillin 250mg", "8", "15", "Low Stock", "$100.00"],
-        ["Ibuprofen 400mg", "75", "25", "In Stock", "$674.25"],
-        ["Omeprazole 20mg", "5", "30", "Low Stock", "$75.00"],
-        ["Vitamin C 1000mg", "90", "20", "In Stock", "$989.10"],
+      headers: [
+        "Medicine",
+        "Batch",
+        "Quantity",
+        "Min Stock",
+        "Status",
+        "Value",
       ],
+      data: reportData,
       summary: {
-        "Total Items": "328",
-        "Low Stock Items": "2",
-        "Total Value": "$2,736.85",
-        Categories: "5",
+        "Total Items": medicines.length,
+        "Low Stock": medicines.filter((m) => m.quantity <= m.minimum_stock)
+          .length,
+        Expired: medicines.filter((m) => new Date(m.expiry_date) < new Date())
+          .length,
+        "Total Value": formatCurrency(
+          medicines.reduce((s, m) => s + m.selling_price * m.quantity, 0),
+        ),
       },
     });
     toast.success("Inventory report generated!");
   };
 
   const generateFinancialReport = () => {
+    const revenue = totalRevenue;
+    const cost = revenue * 0.6;
+    const profit = revenue - cost;
     setGeneratedReport({
       title: "Financial Report",
-      headers: ["Metric", "This Month", "Last Month", "Change"],
+      headers: ["Metric", "Amount"],
       data: [
-        ["Revenue", "$34,000", "$30,000", "+13.3%"],
-        ["Cost of Goods", "$18,000", "$16,000", "+12.5%"],
-        ["Gross Profit", "$16,000", "$14,000", "+14.3%"],
-        ["Expenses", "$5,000", "$4,800", "+4.2%"],
-        ["Net Profit", "$11,000", "$9,200", "+19.6%"],
+        ["Revenue", formatCurrency(revenue)],
+        ["Cost of Goods (est.)", formatCurrency(cost)],
+        ["Gross Profit", formatCurrency(profit)],
+        ["Total Sales", sales.length.toString()],
+        [
+          "Avg per Sale",
+          formatCurrency(sales.length > 0 ? revenue / sales.length : 0),
+        ],
       ],
       summary: {
-        Revenue: "$34,000",
-        "Gross Profit": "$16,000",
-        "Net Profit": "$11,000",
-        Margin: "32.4%",
+        Revenue: formatCurrency(revenue),
+        Profit: formatCurrency(profit),
+        "Sales Count": sales.length,
+        Margin:
+          revenue > 0 ? ((profit / revenue) * 100).toFixed(1) + "%" : "0%",
       },
     });
     toast.success("Financial report generated!");
   };
 
   const generateExpiryReport = () => {
+    const expiring = medicines.filter(
+      (m) =>
+        new Date(m.expiry_date) <
+        new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    );
+    const reportData = expiring.map((m) => [
+      m.name,
+      m.batch_number,
+      formatDate(m.expiry_date),
+      m.quantity,
+      new Date(m.expiry_date) < new Date() ? "Expired" : "Expiring Soon",
+    ]);
     setGeneratedReport({
       title: "Expiry Report",
       headers: ["Medicine", "Batch", "Expiry Date", "Quantity", "Status"],
-      data: [
-        ["Omeprazole 20mg", "BATCH-004", "2024-03-01", "5", "Expired"],
-        ["Aspirin 300mg", "BATCH-008", "2024-06-15", "120", "Expiring Soon"],
-        ["Cetirizine 10mg", "BATCH-005", "2024-08-20", "60", "Expiring Soon"],
-        ["Amoxicillin 250mg", "BATCH-002", "2024-08-15", "8", "Expiring Soon"],
-        ["Ibuprofen 400mg", "BATCH-003", "2025-06-20", "75", "Valid"],
-      ],
+      data: reportData,
       summary: {
-        Expired: "1",
-        "Expiring Soon (30d)": "3",
-        Valid: "1",
-        "Total Value at Risk": "$127.50",
+        Expired: medicines.filter((m) => new Date(m.expiry_date) < new Date())
+          .length,
+        "Expiring Soon": medicines.filter(
+          (m) =>
+            new Date(m.expiry_date) > new Date() &&
+            new Date(m.expiry_date) <
+              new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        ).length,
+        "Total at Risk": expiring.length,
       },
     });
     toast.success("Expiry report generated!");
@@ -233,23 +233,17 @@ export default function ReportsPage() {
     if (!generatedReport) return;
     const exportData = generatedReport.data.map((row) => {
       const obj = {};
-      generatedReport.headers.forEach((header, i) => {
-        obj[header] = row[i];
-      });
+      generatedReport.headers.forEach((h, i) => (obj[h] = row[i]));
       return obj;
     });
     exportToCSV(
       exportData,
-      `${generatedReport.title.toLowerCase().replace(/\s/g, "-")}`,
+      generatedReport.title.toLowerCase().replace(/\s/g, "-"),
     );
-    toast.success("Report exported!");
+    toast.success("Exported!");
   };
 
-  const dateRangeLabels = {
-    week: "This Week",
-    month: "This Month",
-    year: "This Year",
-  };
+  const formatDate = (dateStr) => new Date(dateStr).toLocaleDateString();
 
   if (authLoading) return <LoadingSpinner />;
 
@@ -262,51 +256,34 @@ export default function ReportsPage() {
         backUrl="/dashboard"
         actions={
           <div className="flex gap-2">
-            {/* Date Range Toggle */}
-            <Button variant="outline" size="sm" onClick={cycleDateRange}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setDateRange(
+                  dateRange === "week"
+                    ? "month"
+                    : dateRange === "month"
+                      ? "year"
+                      : "week",
+                )
+              }
+            >
               <Calendar className="h-4 w-4 mr-2" />
-              {dateRangeLabels[dateRange]}
+              {dateRange === "week"
+                ? "This Week"
+                : dateRange === "month"
+                  ? "This Month"
+                  : "This Year"}
             </Button>
-
-            {/* Filter Dropdown */}
-            <div className="relative">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowFilter(!showFilter)}
-              >
-                <Filter className="h-4 w-4 mr-2" />
-                Filter
-              </Button>
-              {showFilter && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border z-50">
-                  <div className="py-1">
-                    {["all", "sales", "inventory", "financial", "expiry"].map(
-                      (type) => (
-                        <button
-                          key={type}
-                          onClick={() => handleFilter(type)}
-                          className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 capitalize ${filterType === type ? "bg-orange-50 text-orange-600 font-medium" : "text-gray-700"}`}
-                        >
-                          {type === "all" ? "All Reports" : `${type} Reports`}
-                        </button>
-                      ),
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Export Button */}
-            <Button size="sm" onClick={handleExport}>
-              <Download className="h-4 w-4 mr-2" />
-              Export
+            <Button variant="outline" size="sm">
+              <Filter className="h-4 w-4 mr-2" />
+              Filter
             </Button>
           </div>
         }
       />
 
-      {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-6">
@@ -325,10 +302,8 @@ export default function ReportsPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Total Orders</p>
-                <p className="text-2xl font-bold">
-                  {totalOrders.toLocaleString()}
-                </p>
+                <p className="text-sm text-gray-500">Total Sales</p>
+                <p className="text-2xl font-bold">{sales.length}</p>
               </div>
               <Package className="h-8 w-8 text-blue-500" />
             </div>
@@ -338,8 +313,8 @@ export default function ReportsPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Avg Order</p>
-                <p className="text-2xl font-bold">{formatCurrency(avgOrder)}</p>
+                <p className="text-sm text-gray-500">Medicines</p>
+                <p className="text-2xl font-bold">{medicines.length}</p>
               </div>
               <TrendingUp className="h-8 w-8 text-purple-500" />
             </div>
@@ -349,8 +324,10 @@ export default function ReportsPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Growth</p>
-                <p className="text-2xl font-bold text-green-600">+15.2%</p>
+                <p className="text-sm text-gray-500">Low Stock</p>
+                <p className="text-2xl font-bold text-orange-600">
+                  {stats.low_stock || 0}
+                </p>
               </div>
               <BarChart3 className="h-8 w-8 text-orange-500" />
             </div>
@@ -358,98 +335,97 @@ export default function ReportsPage() {
         </Card>
       </div>
 
-      {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle>{dateRangeLabels[dateRange]} Sales Trend</CardTitle>
+            <CardTitle>Weekly Sales</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={currentData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="day" />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="sales" fill="#f97316" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {weeklySales.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={weeklySales}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="day" />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="sales" fill="#f97316" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-80 flex items-center justify-center text-gray-400">
+                No data
+              </div>
+            )}
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Top Selling Medicines</CardTitle>
+            <CardTitle>Top Medicines</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={topMedicines}
-                  dataKey="revenue"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={100}
-                  label={({ name, percent }) =>
-                    `${name} ${(percent * 100).toFixed(0)}%`
-                  }
-                >
-                  {topMedicines.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={COLORS[index % COLORS.length]}
-                    />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+            {topMedicines.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={topMedicines}
+                    dataKey="revenue"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={100}
+                  >
+                    {topMedicines.map((_, i) => (
+                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-80 flex items-center justify-center text-gray-400">
+                No data
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Generate Reports */}
       <Card>
         <CardHeader>
-          <CardTitle>Generate New Report</CardTitle>
+          <CardTitle>Generate Reports</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <button
               onClick={generateSalesReport}
-              className="p-6 border-2 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition-all cursor-pointer"
+              className="p-6 border-2 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition-all"
             >
               <TrendingUp className="h-8 w-8 text-orange-500 mx-auto mb-2" />
               <p className="font-medium">Sales Report</p>
-              <p className="text-xs text-gray-500 mt-1">Click to generate</p>
             </button>
             <button
               onClick={generateInventoryReport}
-              className="p-6 border-2 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition-all cursor-pointer"
+              className="p-6 border-2 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition-all"
             >
               <Package className="h-8 w-8 text-orange-500 mx-auto mb-2" />
               <p className="font-medium">Inventory Report</p>
-              <p className="text-xs text-gray-500 mt-1">Click to generate</p>
             </button>
             <button
               onClick={generateFinancialReport}
-              className="p-6 border-2 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition-all cursor-pointer"
+              className="p-6 border-2 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition-all"
             >
               <DollarSign className="h-8 w-8 text-orange-500 mx-auto mb-2" />
               <p className="font-medium">Financial Report</p>
-              <p className="text-xs text-gray-500 mt-1">Click to generate</p>
             </button>
             <button
               onClick={generateExpiryReport}
-              className="p-6 border-2 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition-all cursor-pointer"
+              className="p-6 border-2 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition-all"
             >
               <BarChart3 className="h-8 w-8 text-orange-500 mx-auto mb-2" />
               <p className="font-medium">Expiry Report</p>
-              <p className="text-xs text-gray-500 mt-1">Click to generate</p>
             </button>
           </div>
 
-          {/* Generated Report */}
           {generatedReport && (
             <div className="mt-6 border-t pt-6">
               <div className="flex items-center justify-between mb-4">
@@ -457,7 +433,7 @@ export default function ReportsPage() {
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={handleExportCSV}>
                     <Download className="h-4 w-4 mr-2" />
-                    Export CSV
+                    Export
                   </Button>
                   <Button
                     variant="ghost"
@@ -494,14 +470,12 @@ export default function ReportsPage() {
                 <div className="mt-4 p-4 bg-gray-50 rounded-lg">
                   <h4 className="font-medium mb-2">Summary</h4>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {Object.entries(generatedReport.summary).map(
-                      ([key, value]) => (
-                        <div key={key}>
-                          <p className="text-xs text-gray-500">{key}</p>
-                          <p className="text-lg font-bold">{value}</p>
-                        </div>
-                      ),
-                    )}
+                    {Object.entries(generatedReport.summary).map(([k, v]) => (
+                      <div key={k}>
+                        <p className="text-xs text-gray-500">{k}</p>
+                        <p className="text-lg font-bold">{v}</p>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}

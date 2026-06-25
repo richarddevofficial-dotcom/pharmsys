@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useAuth } from "@/hooks/useAuth";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import api from "@/lib/axios";
 import { PageHeader } from "@/components/ui/page-header";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,62 +28,48 @@ import {
   Clock,
   XCircle,
   Eye,
+  ArrowDownCircle,
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import Link from "next/link";
-
-const mockPurchases = [
-  {
-    id: "PO-001",
-    supplier_name: "MedSupply Co.",
-    invoice_number: "INV-2024-001",
-    items: [
-      { name: "Paracetamol 500mg", quantity: 100, cost_price: 3.5 },
-      { name: "Amoxicillin 250mg", quantity: 50, cost_price: 8.0 },
-    ],
-    total_amount: 750.0,
-    status: "RECEIVED",
-    purchase_date: "2024-01-15",
-    received_date: "2024-01-16",
-  },
-  {
-    id: "PO-002",
-    supplier_name: "PharmaDist Ltd.",
-    invoice_number: "INV-2024-002",
-    items: [{ name: "Vitamin C 1000mg", quantity: 200, cost_price: 6.0 }],
-    total_amount: 1200.0,
-    status: "PENDING",
-    purchase_date: "2024-01-14",
-    received_date: null,
-  },
-  {
-    id: "PO-003",
-    supplier_name: "HealthCare Supplies",
-    invoice_number: "INV-2024-003",
-    items: [
-      { name: "Ibuprofen 400mg", quantity: 75, cost_price: 5.0 },
-      { name: "Omeprazole 20mg", quantity: 30, cost_price: 10.0 },
-    ],
-    total_amount: 975.0,
-    status: "CANCELLED",
-    purchase_date: "2024-01-13",
-    received_date: null,
-  },
-];
+import toast from "react-hot-toast";
 
 export default function PurchasesPage() {
   const { isLoading: authLoading } = useAuth(true);
-  useRoleAccess();
   const [search, setSearch] = useState("");
-  const [purchases] = useState(mockPurchases);
   const [selectedPurchase, setSelectedPurchase] = useState(null);
+  const queryClient = useQueryClient();
 
-  const filteredPurchases = purchases.filter(
-    (p) =>
-      p.id.toLowerCase().includes(search.toLowerCase()) ||
-      p.supplier_name.toLowerCase().includes(search.toLowerCase()) ||
-      p.status.toLowerCase().includes(search.toLowerCase()),
-  );
+  const { data: apiResponse, isLoading: purchasesLoading } = useQuery({
+    queryKey: ["purchases", search],
+    queryFn: async () => {
+      const response = await api.get("/purchases/");
+      return response.data;
+    },
+  });
+
+  const purchases = apiResponse?.results || [];
+
+  // Update status mutation
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ id, status }) => {
+      const response = await api.patch(`/purchases/${id}/`, { status });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(["purchases"]);
+      toast.success("Status updated!");
+    },
+    onError: (error) => {
+      toast.error("Failed to update status");
+    },
+  });
+
+  const handleReceiveStock = (purchase) => {
+    if (confirm(`Mark ${purchase.invoice_number} as received?`)) {
+      updateStatusMutation.mutate({ id: purchase.id, status: "RECEIVED" });
+    }
+  };
 
   const getStatusBadge = (status) => {
     switch (status) {
@@ -112,7 +99,13 @@ export default function PurchasesPage() {
     }
   };
 
-  if (authLoading) return <LoadingSpinner />;
+  const totalValue = purchases.reduce(
+    (s, p) => s + parseFloat(p.total_amount || 0),
+    0,
+  );
+  const pendingCount = purchases.filter((p) => p.status === "PENDING").length;
+
+  if (authLoading || purchasesLoading) return <LoadingSpinner />;
 
   return (
     <div className="space-y-6">
@@ -149,9 +142,7 @@ export default function PurchasesPage() {
               <div>
                 <p className="text-sm text-gray-500">Total Value</p>
                 <p className="text-2xl font-bold text-green-600">
-                  {formatCurrency(
-                    purchases.reduce((s, p) => s + p.total_amount, 0),
-                  )}
+                  {formatCurrency(totalValue)}
                 </p>
               </div>
               <Truck className="h-8 w-8 text-green-500" />
@@ -164,7 +155,7 @@ export default function PurchasesPage() {
               <div>
                 <p className="text-sm text-gray-500">Pending</p>
                 <p className="text-2xl font-bold text-yellow-600">
-                  {purchases.filter((p) => p.status === "PENDING").length}
+                  {pendingCount}
                 </p>
               </div>
               <Clock className="h-8 w-8 text-yellow-500" />
@@ -206,24 +197,24 @@ export default function PurchasesPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredPurchases.length === 0 ? (
+                      {purchases.length === 0 ? (
                         <TableRow>
                           <TableCell
                             colSpan={7}
                             className="text-center py-8 text-gray-400"
                           >
                             <Search className="h-12 w-12 mx-auto mb-2" />
-                            <p>No purchase orders found</p>
+                            <p>No purchase orders</p>
                           </TableCell>
                         </TableRow>
                       ) : (
-                        filteredPurchases.map((p) => (
+                        purchases.map((p) => (
                           <TableRow key={p.id}>
                             <TableCell className="font-medium text-sm">
-                              {p.id}
+                              #{p.id}
                             </TableCell>
                             <TableCell className="text-sm">
-                              {p.supplier_name}
+                              {p.supplier_name || "N/A"}
                             </TableCell>
                             <TableCell className="text-sm">
                               {p.invoice_number}
@@ -236,13 +227,25 @@ export default function PurchasesPage() {
                               {formatDate(p.purchase_date)}
                             </TableCell>
                             <TableCell>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setSelectedPurchase(p)}
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
+                              <div className="flex gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setSelectedPurchase(p)}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                                {p.status === "PENDING" && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleReceiveStock(p)}
+                                    title="Receive Stock"
+                                  >
+                                    <ArrowDownCircle className="h-4 w-4 text-green-500" />
+                                  </Button>
+                                )}
+                              </div>
                             </TableCell>
                           </TableRow>
                         ))
@@ -264,12 +267,18 @@ export default function PurchasesPage() {
               <div className="space-y-4">
                 <div>
                   <p className="text-sm text-gray-500">Order ID</p>
-                  <p className="font-medium">{selectedPurchase.id}</p>
+                  <p className="font-medium">#{selectedPurchase.id}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Supplier</p>
                   <p className="font-medium">
-                    {selectedPurchase.supplier_name}
+                    {selectedPurchase.supplier_name || "N/A"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Invoice</p>
+                  <p className="font-medium">
+                    {selectedPurchase.invoice_number}
                   </p>
                 </div>
                 <div>
@@ -277,27 +286,50 @@ export default function PurchasesPage() {
                   {getStatusBadge(selectedPurchase.status)}
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500">Items</p>
-                  <div className="mt-2 space-y-2">
-                    {selectedPurchase.items.map((item, i) => (
-                      <div key={i} className="flex justify-between text-sm">
-                        <span>{item.name}</span>
-                        <span className="text-gray-500">x{item.quantity}</span>
-                      </div>
-                    ))}
-                  </div>
+                  <p className="text-sm text-gray-500">Date</p>
+                  <p className="font-medium">
+                    {formatDate(selectedPurchase.purchase_date)}
+                  </p>
                 </div>
+                {selectedPurchase.items?.length > 0 && (
+                  <div>
+                    <p className="text-sm text-gray-500">Items</p>
+                    <div className="mt-2 space-y-2">
+                      {selectedPurchase.items.map((item, i) => (
+                        <div key={i} className="flex justify-between text-sm">
+                          <span>{item.medicine_name}</span>
+                          <span className="text-gray-500">
+                            x{item.quantity}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="border-t pt-2">
                   <div className="flex justify-between font-bold">
                     <span>Total</span>
                     <span>{formatCurrency(selectedPurchase.total_amount)}</span>
                   </div>
                 </div>
+
+                {selectedPurchase.status === "PENDING" && (
+                  <Button
+                    className="w-full"
+                    onClick={() => handleReceiveStock(selectedPurchase)}
+                    disabled={updateStatusMutation.isLoading}
+                  >
+                    <ArrowDownCircle className="h-4 w-4 mr-2" />
+                    {updateStatusMutation.isLoading
+                      ? "Updating..."
+                      : "Receive Stock"}
+                  </Button>
+                )}
               </div>
             ) : (
               <div className="text-center py-8 text-gray-400">
                 <Eye className="h-12 w-12 mx-auto mb-2" />
-                <p>Select an order to view details</p>
+                <p>Select an order</p>
               </div>
             )}
           </CardContent>

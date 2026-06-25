@@ -3,53 +3,71 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import api from "@/lib/axios";
 import { PageHeader } from "@/components/ui/page-header";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { Save, Plus, Trash2, Search, ShoppingBag } from "lucide-react";
+import { Save, Trash2, Search } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import toast from "react-hot-toast";
-
-// Mock suppliers
-const mockSuppliers = [
-  { id: 1, name: "MedSupply Co." },
-  { id: 2, name: "PharmaDist Ltd." },
-  { id: 3, name: "HealthCare Supplies" },
-  { id: 4, name: "Global Pharma Inc." },
-];
-
-// Mock medicines for selection
-const mockMedicines = [
-  { id: 1, name: "Paracetamol 500mg", cost_price: 3.5 },
-  { id: 2, name: "Amoxicillin 250mg", cost_price: 8.0 },
-  { id: 3, name: "Ibuprofen 400mg", cost_price: 5.0 },
-  { id: 4, name: "Omeprazole 20mg", cost_price: 10.0 },
-  { id: 5, name: "Vitamin C 1000mg", cost_price: 6.0 },
-  { id: 6, name: "Cetirizine 10mg", cost_price: 4.5 },
-  { id: 7, name: "Metformin 500mg", cost_price: 4.0 },
-  { id: 8, name: "Aspirin 300mg", cost_price: 2.5 },
-];
 
 export default function AddPurchasePage() {
   const router = useRouter();
   const { isLoading: authLoading } = useAuth(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchMedicine, setSearchMedicine] = useState("");
 
   const [formData, setFormData] = useState({
-    supplier_id: "",
+    supplier: "",
     invoice_number: "",
     purchase_date: new Date().toISOString().split("T")[0],
     items: [],
     notes: "",
   });
 
-  // Add item to purchase
+  // Fetch real suppliers
+  const { data: suppliersData } = useQuery({
+    queryKey: ["suppliers"],
+    queryFn: async () => {
+      const response = await api.get("/suppliers/");
+      return response.data;
+    },
+  });
+  const suppliers = suppliersData?.results || [];
+
+  // Fetch real medicines
+  const { data: medicinesData } = useQuery({
+    queryKey: ["medicines-for-purchase"],
+    queryFn: async () => {
+      const response = await api.get("/medicines/");
+      return response.data;
+    },
+  });
+  const medicines = medicinesData?.results || [];
+
+  // Create purchase mutation
+  const createMutation = useMutation({
+    mutationFn: async (data) => {
+      const response = await api.post("/purchases/", data);
+      return response.data;
+    },
+    onSuccess: () => {
+      toast.success("Purchase order created!");
+      router.push("/purchases");
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.detail || "Failed to create order");
+    },
+  });
+
+  const filteredMedicines = medicines.filter((med) =>
+    med.name?.toLowerCase().includes(searchMedicine.toLowerCase()),
+  );
+
   const addItem = (medicine) => {
     const existing = formData.items.find(
       (item) => item.medicine_id === medicine.id,
@@ -62,7 +80,7 @@ export default function AddPurchasePage() {
             ? {
                 ...item,
                 quantity: item.quantity + 1,
-                total: (item.quantity + 1) * item.cost_price,
+                total_price: (item.quantity + 1) * parseFloat(item.cost_price),
               }
             : item,
         ),
@@ -75,9 +93,13 @@ export default function AddPurchasePage() {
           {
             medicine_id: medicine.id,
             medicine_name: medicine.name,
-            cost_price: medicine.cost_price,
+            cost_price: parseFloat(
+              medicine.cost_price || medicine.selling_price || 0,
+            ),
             quantity: 1,
-            total: medicine.cost_price,
+            total_price: parseFloat(
+              medicine.cost_price || medicine.selling_price || 0,
+            ),
           },
         ],
       });
@@ -85,20 +107,18 @@ export default function AddPurchasePage() {
     toast.success(`${medicine.name} added`);
   };
 
-  // Update item quantity
   const updateItemQuantity = (medicineId, quantity) => {
     if (quantity < 1) return;
     setFormData({
       ...formData,
       items: formData.items.map((item) =>
         item.medicine_id === medicineId
-          ? { ...item, quantity, total: quantity * item.cost_price }
+          ? { ...item, quantity, total_price: quantity * item.cost_price }
           : item,
       ),
     });
   };
 
-  // Remove item
   const removeItem = (medicineId) => {
     setFormData({
       ...formData,
@@ -106,21 +126,16 @@ export default function AddPurchasePage() {
     });
   };
 
-  // Calculate totals
-  const subtotal = formData.items.reduce((sum, item) => sum + item.total, 0);
+  const subtotal = formData.items.reduce(
+    (sum, item) => sum + (item.total_price || 0),
+    0,
+  );
   const tax = subtotal * 0.05;
   const total = subtotal + tax;
 
-  // Filter medicines
-  const filteredMedicines = mockMedicines.filter((med) =>
-    med.name.toLowerCase().includes(searchMedicine.toLowerCase()),
-  );
-
-  // Submit
   const handleSubmit = (e) => {
     e.preventDefault();
-
-    if (!formData.supplier_id) {
+    if (!formData.supplier) {
       toast.error("Please select a supplier");
       return;
     }
@@ -128,23 +143,20 @@ export default function AddPurchasePage() {
       toast.error("Please add at least one medicine");
       return;
     }
+    if (!formData.invoice_number) {
+      toast.error("Please enter invoice number");
+      return;
+    }
 
-    setIsSubmitting(true);
-
-    const purchaseOrder = {
-      ...formData,
-      id: `PO-${Date.now()}`,
+    createMutation.mutate({
+      supplier: formData.supplier,
+      invoice_number: formData.invoice_number,
+      purchase_date: formData.purchase_date,
       total_amount: total,
       status: "PENDING",
-      created_at: new Date().toISOString(),
-    };
-
-    setTimeout(() => {
-      console.log("Purchase Order:", purchaseOrder);
-      toast.success("Purchase order created successfully!");
-      setIsSubmitting(false);
-      router.push("/purchases");
-    }, 1000);
+      notes: formData.notes,
+      items: formData.items,
+    });
   };
 
   if (authLoading) return <LoadingSpinner />;
@@ -165,9 +177,7 @@ export default function AddPurchasePage() {
 
       <form onSubmit={handleSubmit}>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left - Purchase Details */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Supplier & Invoice */}
             <Card>
               <CardHeader>
                 <CardTitle>Purchase Details</CardTitle>
@@ -175,21 +185,17 @@ export default function AddPurchasePage() {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="supplier">Supplier *</Label>
+                    <Label>Supplier *</Label>
                     <select
-                      id="supplier"
-                      value={formData.supplier_id}
+                      value={formData.supplier}
                       onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          supplier_id: e.target.value,
-                        })
+                        setFormData({ ...formData, supplier: e.target.value })
                       }
-                      className="w-full h-10 rounded-md border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      className="w-full h-10 rounded-md border border-gray-300 px-3 text-sm"
                       required
                     >
                       <option value="">Select supplier</option>
-                      {mockSuppliers.map((s) => (
+                      {suppliers.map((s) => (
                         <option key={s.id} value={s.id}>
                           {s.name}
                         </option>
@@ -197,9 +203,8 @@ export default function AddPurchasePage() {
                     </select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="invoice">Invoice Number *</Label>
+                    <Label>Invoice Number *</Label>
                     <Input
-                      id="invoice"
                       value={formData.invoice_number}
                       onChange={(e) =>
                         setFormData({
@@ -207,14 +212,12 @@ export default function AddPurchasePage() {
                           invoice_number: e.target.value,
                         })
                       }
-                      placeholder="e.g., INV-2024-001"
                       required
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="date">Purchase Date *</Label>
+                    <Label>Purchase Date *</Label>
                     <Input
-                      id="date"
                       type="date"
                       value={formData.purchase_date}
                       onChange={(e) =>
@@ -228,39 +231,33 @@ export default function AddPurchasePage() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="notes">Notes</Label>
+                  <Label>Notes</Label>
                   <textarea
-                    id="notes"
                     value={formData.notes}
                     onChange={(e) =>
                       setFormData({ ...formData, notes: e.target.value })
                     }
                     rows={2}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    placeholder="Any additional notes..."
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                   />
                 </div>
               </CardContent>
             </Card>
 
-            {/* Add Medicines */}
             <Card>
               <CardHeader>
                 <CardTitle>Add Medicines</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Search Medicines */}
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                   <Input
-                    placeholder="Search medicines to add..."
+                    placeholder="Search medicines..."
                     value={searchMedicine}
                     onChange={(e) => setSearchMedicine(e.target.value)}
                     className="pl-10"
                   />
                 </div>
-
-                {/* Medicine Selection Grid */}
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-y-auto">
                   {filteredMedicines.map((med) => (
                     <button
@@ -271,13 +268,13 @@ export default function AddPurchasePage() {
                     >
                       <p className="font-medium truncate">{med.name}</p>
                       <p className="text-xs text-gray-500">
-                        Cost: {formatCurrency(med.cost_price)}
+                        Cost:{" "}
+                        {formatCurrency(med.cost_price || med.selling_price)}
                       </p>
                     </button>
                   ))}
                 </div>
 
-                {/* Selected Items */}
                 {formData.items.length > 0 && (
                   <div className="border-t pt-4">
                     <h4 className="font-medium text-sm mb-3">
@@ -339,7 +336,7 @@ export default function AddPurchasePage() {
                               +
                             </Button>
                             <span className="w-20 text-right text-sm font-medium">
-                              {formatCurrency(item.total)}
+                              {formatCurrency(item.total_price)}
                             </span>
                             <Button
                               type="button"
@@ -360,7 +357,6 @@ export default function AddPurchasePage() {
             </Card>
           </div>
 
-          {/* Right - Summary */}
           <Card className="h-fit">
             <CardHeader>
               <CardTitle>Order Summary</CardTitle>
@@ -386,13 +382,13 @@ export default function AddPurchasePage() {
                   </span>
                 </div>
               </div>
-
-              <Button type="submit" className="w-full" disabled={isSubmitting}>
-                {isSubmitting ? (
-                  <div className="flex items-center gap-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    Creating...
-                  </div>
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={createMutation.isLoading}
+              >
+                {createMutation.isLoading ? (
+                  "Creating..."
                 ) : (
                   <>
                     <Save className="h-4 w-4 mr-2" />
@@ -400,7 +396,6 @@ export default function AddPurchasePage() {
                   </>
                 )}
               </Button>
-
               <Button
                 type="button"
                 variant="outline"

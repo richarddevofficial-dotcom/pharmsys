@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useAuth } from "@/hooks/useAuth";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supplierService } from "@/services/supplierService";
 import { PageHeader } from "@/components/ui/page-header";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,7 +25,6 @@ import {
   Phone,
   Mail,
   MapPin,
-  Truck,
   Edit,
   Trash2,
   Package,
@@ -33,71 +33,37 @@ import {
 import Link from "next/link";
 import toast from "react-hot-toast";
 
-const initialSuppliers = [
-  {
-    id: 1,
-    name: "MedSupply Co.",
-    contact_person: "Robert Brown",
-    phone: "+1 234-567-8901",
-    email: "robert@medsupply.com",
-    address: "123 Healthcare Ave, NY",
-    total_orders: 45,
-    active_since: "2020-03-15",
-  },
-  {
-    id: 2,
-    name: "PharmaDist Ltd.",
-    contact_person: "Sarah Johnson",
-    phone: "+1 234-567-8902",
-    email: "sarah@pharmadist.com",
-    address: "456 Industry Blvd, CA",
-    total_orders: 32,
-    active_since: "2019-06-20",
-  },
-  {
-    id: 3,
-    name: "HealthCare Supplies",
-    contact_person: "Michael Lee",
-    phone: "+1 234-567-8903",
-    email: "michael@healthcaresupplies.com",
-    address: "789 Medical Dr, TX",
-    total_orders: 28,
-    active_since: "2021-01-10",
-  },
-  {
-    id: 4,
-    name: "Global Pharma Inc.",
-    contact_person: "Emily Davis",
-    phone: "+1 234-567-8904",
-    email: "emily@globalpharma.com",
-    address: "321 Commerce St, FL",
-    total_orders: 15,
-    active_since: "2022-08-05",
-  },
-];
-
 export default function SuppliersPage() {
   const { isLoading: authLoading } = useAuth(true);
-  useRoleAccess();
   const [search, setSearch] = useState("");
-  const [suppliers, setSuppliers] = useState(initialSuppliers);
   const [deleteId, setDeleteId] = useState(null);
+  const queryClient = useQueryClient();
 
-  const filteredSuppliers = suppliers.filter(
-    (s) =>
-      s.name.toLowerCase().includes(search.toLowerCase()) ||
-      s.contact_person.toLowerCase().includes(search.toLowerCase()) ||
-      s.email.toLowerCase().includes(search.toLowerCase()) ||
-      s.phone.includes(search),
-  );
+  const { data: apiResponse, isLoading: suppliersLoading } = useQuery({
+    queryKey: ["suppliers", search],
+    queryFn: () => supplierService.getAll({ search }),
+  });
+
+  const suppliers = apiResponse?.data?.results || apiResponse?.data || [];
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => supplierService.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries(["suppliers"]);
+      toast.success("Supplier deleted!");
+      setDeleteId(null);
+    },
+    onError: () => {
+      toast.error("Failed to delete");
+      setDeleteId(null);
+    },
+  });
 
   const handleDelete = () => {
-    setSuppliers(suppliers.filter((s) => s.id !== deleteId));
-    toast.success("Supplier deleted successfully!");
-    setDeleteId(null);
+    if (deleteId) deleteMutation.mutate(deleteId);
   };
 
-  if (authLoading) return <LoadingSpinner />;
+  if (authLoading || suppliersLoading) return <LoadingSpinner />;
 
   return (
     <div className="space-y-6">
@@ -123,7 +89,7 @@ export default function SuppliersPage() {
                 <p className="text-sm text-gray-500">Total Suppliers</p>
                 <p className="text-2xl font-bold">{suppliers.length}</p>
               </div>
-              <Truck className="h-8 w-8 text-blue-500" />
+              <Building2 className="h-8 w-8 text-blue-500" />
             </div>
           </CardContent>
         </Card>
@@ -131,9 +97,9 @@ export default function SuppliersPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Total Orders</p>
-                <p className="text-2xl font-bold">
-                  {suppliers.reduce((s, i) => s + i.total_orders, 0)}
+                <p className="text-sm text-gray-500">Active</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {suppliers.filter((s) => s.is_active).length}
                 </p>
               </div>
               <Package className="h-8 w-8 text-green-500" />
@@ -144,10 +110,10 @@ export default function SuppliersPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Active Suppliers</p>
-                <p className="text-2xl font-bold">{suppliers.length}</p>
+                <p className="text-sm text-gray-500">Total Orders</p>
+                <p className="text-2xl font-bold">-</p>
               </div>
-              <Building2 className="h-8 w-8 text-purple-500" />
+              <Package className="h-8 w-8 text-purple-500" />
             </div>
           </CardContent>
         </Card>
@@ -177,15 +143,14 @@ export default function SuppliersPage() {
                     <TableHead>Contact</TableHead>
                     <TableHead>Info</TableHead>
                     <TableHead>Address</TableHead>
-                    <TableHead>Orders</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredSuppliers.length === 0 ? (
+                  {suppliers.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={6}
+                        colSpan={5}
                         className="text-center py-8 text-gray-400"
                       >
                         <Search className="h-12 w-12 mx-auto mb-2" />
@@ -193,7 +158,7 @@ export default function SuppliersPage() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredSuppliers.map((s) => (
+                    suppliers.map((s) => (
                       <TableRow key={s.id}>
                         <TableCell>
                           <div className="flex items-center gap-2">
@@ -225,19 +190,15 @@ export default function SuppliersPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <span className="font-medium text-sm">
-                            {s.total_orders}
-                          </span>
+                          <span className="font-medium text-sm">-</span>
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-1">
-                            {/* Edit Button - Links to edit page */}
                             <Link href={`/suppliers/${s.id}/edit`}>
                               <Button variant="ghost" size="sm">
                                 <Edit className="h-4 w-4" />
                               </Button>
                             </Link>
-                            {/* Delete Button - Opens confirmation */}
                             <Button
                               variant="ghost"
                               size="sm"
@@ -256,14 +217,12 @@ export default function SuppliersPage() {
           </div>
         </CardContent>
       </Card>
-
-      {/* Delete Confirmation Dialog */}
       <ConfirmDialog
         isOpen={!!deleteId}
         onClose={() => setDeleteId(null)}
         onConfirm={handleDelete}
         title="Delete Supplier"
-        message="Are you sure you want to delete this supplier? This action cannot be undone."
+        message="Are you sure?"
       />
     </div>
   );

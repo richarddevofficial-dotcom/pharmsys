@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
-import { useUserStore } from "@/store/userStore";
+import { useMutation } from "@tanstack/react-query";
+import { userService } from "@/services/userService";
 import { PageHeader } from "@/components/ui/page-header";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,8 +20,6 @@ export default function AddUserPage() {
   const router = useRouter();
   const { isLoading: authLoading } = useAuth(true);
   useRoleAccess();
-  const { addUser } = useUserStore();
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     first_name: "",
     last_name: "",
@@ -29,6 +28,15 @@ export default function AddUserPage() {
     phone: "",
     password: "",
     role: "CASHIER",
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data) => userService.create(data),
+    onSuccess: () => {
+      toast.success("User created!");
+      router.push("/users");
+    },
+    onError: (error) => toast.error(error.response?.data?.detail || "Failed"),
   });
 
   const handleChange = (e) => {
@@ -44,18 +52,10 @@ export default function AddUserPage() {
       !formData.username ||
       !formData.password
     ) {
-      toast.error("Please fill all required fields");
+      toast.error("Fill required fields");
       return;
     }
-
-    setIsSubmitting(true);
-
-    setTimeout(() => {
-      addUser(formData);
-      toast.success("User created successfully!");
-      setIsSubmitting(false);
-      router.push("/users");
-    }, 500);
+    createMutation.mutate(formData);
   };
 
   if (authLoading) return <LoadingSpinner />;
@@ -63,10 +63,7 @@ export default function AddUserPage() {
   return (
     <div className="space-y-6">
       <Breadcrumb
-        items={[
-          { label: "User Management", href: "/users" },
-          { label: "Add User" },
-        ]}
+        items={[{ label: "Users", href: "/users" }, { label: "Add User" }]}
       />
       <PageHeader
         title="Add New User"
@@ -82,7 +79,7 @@ export default function AddUserPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>First Name *</Label>
                 <Input
@@ -102,7 +99,7 @@ export default function AddUserPage() {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Username *</Label>
                 <Input
@@ -123,7 +120,7 @@ export default function AddUserPage() {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Email</Label>
                 <Input
@@ -151,15 +148,15 @@ export default function AddUserPage() {
                 className="w-full h-10 rounded-md border border-gray-300 px-3 text-sm"
                 required
               >
-                <option value="SUPER_ADMIN">Super Admin</option>
-                <option value="PHARMACIST">Pharmacist</option>
                 <option value="CASHIER">Cashier</option>
+                <option value="PHARMACIST">Pharmacist</option>
                 <option value="STORE_MANAGER">Store Manager</option>
+                <option value="SUPER_ADMIN">Super Admin</option>
               </select>
             </div>
             <div className="flex gap-3 pt-4">
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? (
+              <Button type="submit" disabled={createMutation.isLoading}>
+                {createMutation.isLoading ? (
                   "Saving..."
                 ) : (
                   <>

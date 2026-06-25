@@ -3,12 +3,14 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
-import { useUserStore } from "@/store/userStore";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { userService } from "@/services/userService";
 import { PageHeader } from "@/components/ui/page-header";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
@@ -38,8 +40,7 @@ import Link from "next/link";
 export default function UsersPage() {
   const { isLoading: authLoading } = useAuth(true);
   useRoleAccess();
-
-  const { users, toggleUserStatus, deleteUser } = useUserStore();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [deleteId, setDeleteId] = useState(null);
   const [editingUser, setEditingUser] = useState(null);
@@ -49,8 +50,66 @@ export default function UsersPage() {
     email: "",
     phone: "",
     role: "",
-    username: "",
   });
+
+  // Fetch users from backend
+  const { data: apiResponse, isLoading: usersLoading } = useQuery({
+    queryKey: ["users"],
+    queryFn: () => userService.getAll(),
+  });
+  const users = apiResponse?.data?.results || apiResponse?.data || [];
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: (id) => userService.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries(["users"]);
+      toast.success("User deleted!");
+      setDeleteId(null);
+    },
+    onError: () => {
+      toast.error("Failed to delete");
+      setDeleteId(null);
+    },
+  });
+
+  // Update mutation
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => userService.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(["users"]);
+      toast.success("User updated!");
+      setEditingUser(null);
+    },
+    onError: () => toast.error("Failed to update"),
+  });
+
+  // Toggle active status
+  const toggleUserStatus = (user) => {
+    updateMutation.mutate({
+      id: user.id,
+      data: { is_active: !user.is_active },
+    });
+  };
+
+  const handleEditClick = (user) => {
+    setEditingUser(user.id);
+    setEditForm({
+      first_name: user.first_name || "",
+      last_name: user.last_name || "",
+      email: user.email || "",
+      phone: user.phone || "",
+      role: user.role || "CASHIER",
+    });
+  };
+
+  const handleSaveEdit = () => {
+    updateMutation.mutate({ id: editingUser, data: editForm });
+  };
+
+  const handleDelete = () => {
+    if (deleteId) deleteMutation.mutate(deleteId);
+  };
 
   const getRoleBadge = (role) => {
     const roles = {
@@ -68,54 +127,23 @@ export default function UsersPage() {
     return roles[role] || { label: role, color: "bg-gray-100 text-gray-800" };
   };
 
-  const handleToggleStatus = (id) => {
-    toggleUserStatus(id);
-    const user = users.find((u) => u.id === id);
-    toast.success(`User ${!user?.is_active ? "activated" : "deactivated"}!`);
-  };
-
-  const handleEditClick = (user) => {
-    setEditingUser(user.id);
-    setEditForm({
-      first_name: user.first_name,
-      last_name: user.last_name,
-      email: user.email,
-      phone: user.phone,
-      role: user.role,
-      username: user.username,
-    });
-  };
-
-  const handleSaveEdit = () => {
-    const { updateUser } = useUserStore.getState();
-    updateUser(editingUser, editForm);
-    toast.success("User updated!");
-    setEditingUser(null);
-  };
-
-  const handleDelete = () => {
-    deleteUser(deleteId);
-    toast.success("User deleted!");
-    setDeleteId(null);
-  };
-
   const filteredUsers = users.filter(
     (u) =>
       `${u.first_name} ${u.last_name}`
         .toLowerCase()
         .includes(search.toLowerCase()) ||
-      u.username.toLowerCase().includes(search.toLowerCase()) ||
-      u.email.toLowerCase().includes(search.toLowerCase()),
+      u.username?.toLowerCase().includes(search.toLowerCase()) ||
+      u.email?.toLowerCase().includes(search.toLowerCase()),
   );
 
-  if (authLoading) return <LoadingSpinner />;
+  if (authLoading || usersLoading) return <LoadingSpinner />;
 
   return (
     <div className="space-y-6">
       <Breadcrumb items={[{ label: "User Management" }]} />
       <PageHeader
         title="User Management"
-        description="Manage system users and their roles"
+        description="Manage system users"
         backUrl="/dashboard"
         actions={
           <Link href="/users/add">
@@ -126,7 +154,6 @@ export default function UsersPage() {
           </Link>
         }
       />
-
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-6">
@@ -194,118 +221,112 @@ export default function UsersPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto -mx-4 sm:mx-0">
-            <div className="min-w-[600px] md:min-w-0">
-              <Table>
-                <TableHeader>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>User</TableHead>
+                  <TableHead>Contact</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredUsers.length === 0 ? (
                   <TableRow>
-                    <TableHead>User</TableHead>
-                    <TableHead>Contact</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableCell
+                      colSpan={5}
+                      className="text-center py-8 text-gray-400"
+                    >
+                      <Search className="h-12 w-12 mx-auto mb-2" />
+                      <p>No users found</p>
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredUsers.length === 0 ? (
-                    <TableRow>
-                      <TableCell
-                        colSpan={6}
-                        className="text-center py-8 text-gray-400"
-                      >
-                        <Search className="h-12 w-12 mx-auto mb-2" />
-                        <p>No users found</p>
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredUsers.map((u) => {
-                      const rb = getRoleBadge(u.role);
-                      return (
-                        <TableRow key={u.id}>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <div
-                                className={`w-8 h-8 rounded-full flex items-center justify-center ${u.is_active ? "bg-blue-100" : "bg-gray-200"}`}
-                              >
-                                <span
-                                  className={`font-bold text-xs ${u.is_active ? "text-blue-600" : "text-gray-400"}`}
-                                >
-                                  {u.first_name[0]}
-                                  {u.last_name[0]}
-                                </span>
-                              </div>
-                              <div>
-                                <p className="font-medium text-sm">
-                                  {u.first_name} {u.last_name}
-                                </p>
-                                <p className="text-xs text-gray-500">
-                                  @{u.username}
-                                </p>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-1">
-                                <Mail className="h-3 w-3 text-gray-400" />
-                                <span className="text-xs">{u.email}</span>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <Phone className="h-3 w-3 text-gray-400" />
-                                <span className="text-xs">{u.phone}</span>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge className={`text-xs ${rb.color}`}>
-                              {rb.label}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <button
-                              onClick={() => handleToggleStatus(u.id)}
-                              className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium cursor-pointer ${u.is_active ? "bg-green-100 text-green-800 hover:bg-red-100 hover:text-red-800" : "bg-red-100 text-red-800 hover:bg-green-100 hover:text-green-800"}`}
+                ) : (
+                  filteredUsers.map((u) => {
+                    const rb = getRoleBadge(u.role);
+                    return (
+                      <TableRow key={u.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div
+                              className={`w-8 h-8 rounded-full flex items-center justify-center ${u.is_active ? "bg-blue-100" : "bg-gray-200"}`}
                             >
-                              {u.is_active ? (
-                                <>
-                                  <UserCheck className="h-3 w-3" /> Active
-                                </>
-                              ) : (
-                                <>
-                                  <UserX className="h-3 w-3" /> Inactive
-                                </>
-                              )}
-                            </button>
-                          </TableCell>
-                          <TableCell className="text-sm text-gray-500 whitespace-nowrap">
-                            {new Date(u.created_at).toLocaleDateString()}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex gap-1">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleEditClick(u)}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setDeleteId(u.id)}
-                              >
-                                <Trash2 className="h-4 w-4 text-red-500" />
-                              </Button>
+                              <span className="font-bold text-xs">
+                                {u.first_name?.[0]}
+                                {u.last_name?.[0]}
+                              </span>
                             </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+                            <div>
+                              <p className="font-medium text-sm">
+                                {u.first_name} {u.last_name}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                @{u.username}
+                              </p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1">
+                              <Mail className="h-3 w-3 text-gray-400" />
+                              <span className="text-xs">{u.email || "-"}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Phone className="h-3 w-3 text-gray-400" />
+                              <span className="text-xs">{u.phone || "-"}</span>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={`text-xs ${rb.color}`}>
+                            {rb.label}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <button
+                            onClick={() => toggleUserStatus(u)}
+                            className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium cursor-pointer ${u.is_active ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}
+                          >
+                            {u.is_active ? (
+                              <>
+                                <UserCheck className="h-3 w-3" />
+                                Active
+                              </>
+                            ) : (
+                              <>
+                                <UserX className="h-3 w-3" />
+                                Inactive
+                              </>
+                            )}
+                          </button>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEditClick(u)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setDeleteId(u.id)}
+                            >
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
           </div>
         </CardContent>
       </Card>
@@ -317,7 +338,7 @@ export default function UsersPage() {
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-sm font-medium">First Name</label>
+                  <Label>First Name</Label>
                   <Input
                     value={editForm.first_name}
                     onChange={(e) =>
@@ -326,7 +347,7 @@ export default function UsersPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Last Name</label>
+                  <Label>Last Name</Label>
                   <Input
                     value={editForm.last_name}
                     onChange={(e) =>
@@ -336,17 +357,7 @@ export default function UsersPage() {
                 </div>
               </div>
               <div>
-                <label className="text-sm font-medium">Username</label>
-                <Input
-                  value={editForm.username}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, username: e.target.value })
-                  }
-                  disabled
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Email</label>
+                <Label>Email</Label>
                 <Input
                   type="email"
                   value={editForm.email}
@@ -356,7 +367,7 @@ export default function UsersPage() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium">Phone</label>
+                <Label>Phone</Label>
                 <Input
                   value={editForm.phone}
                   onChange={(e) =>
@@ -365,7 +376,7 @@ export default function UsersPage() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium">Role</label>
+                <Label>Role</Label>
                 <select
                   value={editForm.role}
                   onChange={(e) =>
@@ -380,8 +391,12 @@ export default function UsersPage() {
                 </select>
               </div>
               <div className="flex gap-3 pt-3">
-                <Button onClick={handleSaveEdit} className="flex-1">
-                  Save Changes
+                <Button
+                  onClick={handleSaveEdit}
+                  className="flex-1"
+                  disabled={updateMutation.isLoading}
+                >
+                  {updateMutation.isLoading ? "Saving..." : "Save"}
                 </Button>
                 <Button variant="outline" onClick={() => setEditingUser(null)}>
                   Cancel
@@ -397,7 +412,7 @@ export default function UsersPage() {
         onClose={() => setDeleteId(null)}
         onConfirm={handleDelete}
         title="Delete User"
-        message="Are you sure you want to delete this user?"
+        message="Are you sure?"
       />
     </div>
   );

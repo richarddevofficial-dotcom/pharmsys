@@ -9,17 +9,30 @@ export function useAuth(requireAuth = true) {
   const pathname = usePathname();
   const user = useAuthStore((state) => state.user);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isLoading = useAuthStore((state) => state.isLoading);
+  const fetchUser = useAuthStore((state) => state.fetchUser);
 
   useEffect(() => {
-    // If auth is required and user is not authenticated, redirect to login
-    if (requireAuth && !isAuthenticated && pathname !== "/login") {
+    const token = localStorage.getItem("access_token");
+    if (token && !user && !isLoading) {
+      fetchUser();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (
+      !isLoading &&
+      requireAuth &&
+      !isAuthenticated &&
+      pathname !== "/login"
+    ) {
       router.push("/login");
     }
-  }, [isAuthenticated, requireAuth, router, pathname]);
+  }, [isLoading, isAuthenticated, requireAuth, router, pathname]);
 
   return {
     user,
     isAuthenticated,
-    isLoading: false,
+    isLoading,
   };
 }

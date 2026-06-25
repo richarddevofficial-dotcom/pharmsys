@@ -1,0 +1,8 @@
+import api from "@/lib/axios";
+
+export const supplierService = {
+  getAll: (params) => api.get("/suppliers/", { params }),
+  create: (data) => api.post("/suppliers/", data),
+  update: (id, data) => api.put(`/suppliers/${id}/`, data),
+  delete: (id) => api.delete(`/suppliers/${id}/`),
+};

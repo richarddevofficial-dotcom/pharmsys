@@ -1,9 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useSettingsStore } from "@/store/settingsStore";
+import { useCartStore } from "@/store/cartStore";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import api from "@/lib/axios";
 import { PageHeader } from "@/components/ui/page-header";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,79 +32,13 @@ import {
 import { formatCurrency } from "@/lib/utils";
 import toast from "react-hot-toast";
 
-const mockMedicines = [
-  {
-    id: 1,
-    name: "Paracetamol 500mg",
-    generic_name: "Paracetamol",
-    selling_price: 500,
-    quantity: 100,
-    batch_number: "B001",
-  },
-  {
-    id: 2,
-    name: "Amoxicillin 250mg",
-    generic_name: "Amoxicillin",
-    selling_price: 1200,
-    quantity: 50,
-    batch_number: "B002",
-  },
-  {
-    id: 3,
-    name: "Ibuprofen 400mg",
-    generic_name: "Ibuprofen",
-    selling_price: 800,
-    quantity: 75,
-    batch_number: "B003",
-  },
-  {
-    id: 4,
-    name: "Omeprazole 20mg",
-    generic_name: "Omeprazole",
-    selling_price: 1500,
-    quantity: 30,
-    batch_number: "B004",
-  },
-  {
-    id: 5,
-    name: "Cetirizine 10mg",
-    generic_name: "Cetirizine",
-    selling_price: 700,
-    quantity: 60,
-    batch_number: "B005",
-  },
-  {
-    id: 6,
-    name: "Vitamin C 1000mg",
-    generic_name: "Ascorbic Acid",
-    selling_price: 1000,
-    quantity: 90,
-    batch_number: "B006",
-  },
-  {
-    id: 7,
-    name: "Metformin 500mg",
-    generic_name: "Metformin",
-    selling_price: 600,
-    quantity: 45,
-    batch_number: "B007",
-  },
-  {
-    id: 8,
-    name: "Aspirin 300mg",
-    generic_name: "Aspirin",
-    selling_price: 400,
-    quantity: 120,
-    batch_number: "B008",
-  },
-];
-
 export default function POSPage() {
   const { user, isLoading: authLoading } = useAuth(true);
-  useRoleAccess();
-  // READ ALL SETTINGS FROM STORE - including taxRate
   const { currency, showBothCurrencies, usdToSspRate, taxRate } =
     useSettingsStore();
+  const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const fromPrescription = searchParams.get("from");
 
   const [cart, setCart] = useState([]);
   const [search, setSearch] = useState("");
@@ -114,15 +51,53 @@ export default function POSPage() {
   const [showScanner, setShowScanner] = useState(false);
   const [selectedCurrency, setSelectedCurrency] = useState(currency || "SSP");
 
-  // Use settings from store
   const exchangeRate = usdToSspRate || 1500;
   const currentTaxRate = taxRate || 5;
 
-  const filteredMedicines = mockMedicines.filter(
-    (med) =>
-      med.name.toLowerCase().includes(search.toLowerCase()) ||
-      med.generic_name.toLowerCase().includes(search.toLowerCase()),
-  );
+  const { data: medsResponse, isLoading: medsLoading } = useQuery({
+    queryKey: ["pos-medicines"],
+    queryFn: async () => {
+      const response = await api.get("/medicines/");
+      return response.data;
+    },
+  });
+  const medicines = medsResponse?.results || [];
+
+  // Auto-load prescription medicines
+  useEffect(() => {
+    if (fromPrescription === "prescription") {
+      const prescriptionData = useCartStore.getState().getPrescriptionItems();
+      if (prescriptionData?.medicines) {
+        const itemsToAdd = [];
+        prescriptionData.medicines.forEach((presMed) => {
+          const match = medicines.find((m) =>
+            m.name?.toLowerCase().includes(presMed.name?.toLowerCase()),
+          );
+          if (match) {
+            itemsToAdd.push({ ...match, quantity: 1 });
+          }
+        });
+        if (itemsToAdd.length > 0) {
+          setCart(itemsToAdd);
+          toast.success(
+            `Loaded ${itemsToAdd.length} medicines from prescription`,
+          );
+        }
+      }
+    }
+  }, [fromPrescription, medicines]);
+
+  const saleMutation = useMutation({
+    mutationFn: async (saleData) => {
+      const response = await api.post("/sales/", saleData);
+      return response.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries(["sales"]);
+      toast.success(`✅ Sale #${data.id} completed!`);
+    },
+    onError: (error) => toast.error(error.response?.data?.detail || "Failed"),
+  });
 
   const addToCart = (medicine) => {
     const existing = cart.find((item) => item.id === medicine.id);
@@ -141,11 +116,13 @@ export default function POSPage() {
   };
 
   const handleBarcodeScan = (barcode) => {
-    const medicine = mockMedicines.find((m) => m.batch_number === barcode);
+    const medicine = medicines.find(
+      (m) => m.batch_number === barcode || m.barcode === barcode,
+    );
     if (medicine) {
       addToCart(medicine);
     } else {
-      toast.error("Medicine not found");
+      toast.error("Not found");
     }
   };
 
@@ -172,8 +149,10 @@ export default function POSPage() {
     setShowPayment(false);
   };
 
-  const subtotal = cart.reduce((s, i) => s + i.selling_price * i.quantity, 0);
-  // Use tax rate from settings
+  const subtotal = cart.reduce(
+    (s, i) => s + parseFloat(i.selling_price || 0) * i.quantity,
+    0,
+  );
   const tax = subtotal * (currentTaxRate / 100);
   const discountAmount = subtotal * (discount / 100);
   const total = subtotal + tax - discountAmount;
@@ -191,34 +170,72 @@ export default function POSPage() {
       toast.error("Cart is empty!");
       return;
     }
-    const invoice = {
-      id: Date.now(),
-      items: cart,
-      subtotal: displaySubtotal,
-      taxRate: currentTaxRate,
+    const items = cart.map((item) => ({
+      medicine_name: item.name,
+      quantity: item.quantity,
+      unit_price:
+        selectedCurrency === "USD"
+          ? item.selling_price / exchangeRate
+          : item.selling_price,
+      total_price:
+        selectedCurrency === "USD"
+          ? (item.selling_price * item.quantity) / exchangeRate
+          : item.selling_price * item.quantity,
+    }));
+    const saleData = {
+      total_amount: displayTotal,
       tax: displayTax,
       discount: displayDiscount,
-      discountPercent: discount,
-      total: displayTotal,
+      payment_method: paymentMethod,
       currency: selectedCurrency,
-      exchangeRate: exchangeRate,
-      paymentMethod,
-      date: new Date().toISOString(),
-      cashier: user?.first_name || "User",
+      items: items,
     };
-    setLastSale(invoice);
-    setLastReceipt(invoice);
-    setShowReceipt(true);
-    toast.success(
-      `✅ Sale completed! Total: ${formatCurrency(displayTotal, selectedCurrency)}`,
-      { duration: 4000 },
-    );
-    setCart([]);
-    setDiscount(0);
-    setShowPayment(false);
+
+    saleMutation.mutate(saleData, {
+      onSuccess: async (data) => {
+        const prescriptionData = useCartStore.getState().getPrescriptionItems();
+        if (prescriptionData?.prescriptionId) {
+          try {
+            await api.patch(
+              `/prescriptions/${prescriptionData.prescriptionId}/`,
+              { status: "DISPENSED" },
+            );
+            toast.success("Prescription marked as dispensed!");
+            useCartStore.getState().clearPrescriptionItems();
+          } catch (error) {
+            console.error("Failed to update prescription:", error);
+          }
+        }
+        const invoice = {
+          id: data.id,
+          items: cart,
+          subtotal: displaySubtotal,
+          tax: displayTax,
+          discount: displayDiscount,
+          discountPercent: discount,
+          total: displayTotal,
+          currency: selectedCurrency,
+          paymentMethod,
+          date: new Date().toISOString(),
+          cashier: user?.first_name || "User",
+        };
+        setLastSale(invoice);
+        setLastReceipt(invoice);
+        setShowReceipt(true);
+        setCart([]);
+        setDiscount(0);
+        setShowPayment(false);
+      },
+    });
   };
 
-  if (authLoading) return <LoadingSpinner />;
+  if (authLoading || medsLoading) return <LoadingSpinner />;
+
+  const filteredMedicines = medicines.filter(
+    (med) =>
+      med.name?.toLowerCase().includes(search.toLowerCase()) ||
+      med.generic_name?.toLowerCase().includes(search.toLowerCase()),
+  );
 
   return (
     <div className="h-full flex flex-col space-y-4">
@@ -246,9 +263,7 @@ export default function POSPage() {
           </Button>
         }
       />
-
       <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 min-h-0">
-        {/* Left Side - Products */}
         <div className="flex-1 space-y-4 min-w-0">
           <div className="flex gap-2">
             <div className="relative flex-1">
@@ -282,18 +297,22 @@ export default function POSPage() {
                   <span className="text-sm md:text-lg font-bold text-orange-600">
                     {formatCurrency(
                       selectedCurrency === "USD"
-                        ? med.selling_price / exchangeRate
+                        ? parseFloat(med.selling_price) / exchangeRate
                         : med.selling_price,
                       selectedCurrency,
                     )}
                   </span>
+                  <Badge
+                    variant="secondary"
+                    className="text-xs hidden md:inline-flex"
+                  >
+                    {med.quantity}
+                  </Badge>
                 </div>
               </button>
             ))}
           </div>
         </div>
-
-        {/* Right Side - Cart */}
         <div
           className="w-full lg:w-96 flex flex-col"
           style={{ maxHeight: "calc(100vh - 180px)" }}
@@ -318,17 +337,14 @@ export default function POSPage() {
                 )}
               </div>
             </CardHeader>
-
             <div className="flex-1 overflow-y-auto">
               {cart.length === 0 ? (
                 <div className="text-center py-16 text-gray-400">
                   <ShoppingCart className="h-16 w-16 mx-auto mb-3 text-gray-300" />
-                  <p className="text-base font-medium">Cart is empty</p>
-                  <p className="text-sm mt-1">Tap on medicines to add them</p>
+                  <p>Cart is empty</p>
                 </div>
               ) : (
                 <div className="flex flex-col">
-                  {/* Totals Section */}
                   <div className="px-4 py-3 space-y-2 border-b bg-white">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium text-gray-700">
@@ -349,7 +365,6 @@ export default function POSPage() {
                         </button>
                       </div>
                     </div>
-
                     <div className="space-y-1 bg-gray-50 rounded-lg p-3">
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-500">Subtotal</span>
@@ -402,11 +417,11 @@ export default function POSPage() {
                         </div>
                       )}
                     </div>
-
                     {!showPayment ? (
                       <Button
                         className="w-full bg-orange-500 hover:bg-orange-600 font-bold py-5 text-base"
                         onClick={() => setShowPayment(true)}
+                        disabled={saleMutation.isLoading}
                       >
                         <CreditCard className="h-5 w-5 mr-2" />
                         Pay {formatCurrency(displayTotal, selectedCurrency)}
@@ -445,8 +460,11 @@ export default function POSPage() {
                           <Button
                             className="flex-1 bg-green-600 hover:bg-green-700 font-bold py-5 text-base"
                             onClick={completeSale}
+                            disabled={saleMutation.isLoading}
                           >
-                            Complete Sale
+                            {saleMutation.isLoading
+                              ? "Processing..."
+                              : "Complete Sale"}
                           </Button>
                           <Button
                             variant="outline"
@@ -460,8 +478,6 @@ export default function POSPage() {
                       </div>
                     )}
                   </div>
-
-                  {/* Items List */}
                   <div className="px-3 py-3">
                     <p className="text-xs text-gray-500 font-medium px-1 mb-2">
                       Selected Items ({cart.length}):
@@ -480,7 +496,8 @@ export default function POSPage() {
                               <p className="text-xs text-gray-500">
                                 {formatCurrency(
                                   selectedCurrency === "USD"
-                                    ? item.selling_price / exchangeRate
+                                    ? parseFloat(item.selling_price) /
+                                        exchangeRate
                                     : item.selling_price,
                                   selectedCurrency,
                                 )}{" "}
@@ -497,7 +514,7 @@ export default function POSPage() {
                           <div className="flex items-center justify-end gap-2">
                             <button
                               onClick={() => updateQuantity(item.id, -1)}
-                              className="w-9 h-9 rounded-lg border-2 border-gray-300 flex items-center justify-center hover:bg-red-50 hover:border-red-300 text-lg font-bold text-gray-600"
+                              className="w-9 h-9 rounded-lg border-2 border-gray-300 flex items-center justify-center hover:bg-red-50 text-lg font-bold text-gray-600"
                             >
                               −
                             </button>
@@ -506,14 +523,15 @@ export default function POSPage() {
                             </span>
                             <button
                               onClick={() => updateQuantity(item.id, 1)}
-                              className="w-9 h-9 rounded-lg border-2 border-gray-300 flex items-center justify-center hover:bg-green-50 hover:border-green-300 text-lg font-bold text-gray-600"
+                              className="w-9 h-9 rounded-lg border-2 border-gray-300 flex items-center justify-center hover:bg-green-50 text-lg font-bold text-gray-600"
                             >
                               +
                             </button>
                             <span className="w-24 text-right text-sm font-bold text-orange-600">
                               {formatCurrency(
                                 (selectedCurrency === "USD"
-                                  ? item.selling_price / exchangeRate
+                                  ? parseFloat(item.selling_price) /
+                                    exchangeRate
                                   : item.selling_price) * item.quantity,
                                 selectedCurrency,
                               )}
@@ -529,7 +547,6 @@ export default function POSPage() {
           </Card>
         </div>
       </div>
-
       <BarcodeScanner
         isOpen={showScanner}
         onClose={() => setShowScanner(false)}
