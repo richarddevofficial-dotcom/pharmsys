@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useAuth } from "@/hooks/useAuth";
 import { PageHeader } from "@/components/ui/page-header";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
@@ -118,6 +119,7 @@ const initialMedicines = [
 
 export default function MedicinesPage() {
   const { isLoading: authLoading } = useAuth(true);
+  useRoleAccess();
   const [search, setSearch] = useState("");
   const [medicines, setMedicines] = useState(initialMedicines);
   const [deleteId, setDeleteId] = useState(null);

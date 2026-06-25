@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { useUserStore } from "@/store/userStore";
 import { PageHeader } from "@/components/ui/page-header";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +18,8 @@ import toast from "react-hot-toast";
 export default function AddUserPage() {
   const router = useRouter();
   const { isLoading: authLoading } = useAuth(true);
+  useRoleAccess();
+  const { addUser } = useUserStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     first_name: "",
@@ -34,7 +38,6 @@ export default function AddUserPage() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-
     if (
       !formData.first_name ||
       !formData.last_name ||
@@ -48,11 +51,11 @@ export default function AddUserPage() {
     setIsSubmitting(true);
 
     setTimeout(() => {
-      console.log("New user:", formData);
-      toast.success("User added successfully!");
+      addUser(formData);
+      toast.success("User created successfully!");
       setIsSubmitting(false);
       router.push("/users");
-    }, 1000);
+    }, 500);
   };
 
   if (authLoading) return <LoadingSpinner />;
@@ -70,7 +73,6 @@ export default function AddUserPage() {
         description="Create a new system user"
         backUrl="/users"
       />
-
       <Card className="max-w-2xl">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -82,104 +84,83 @@ export default function AddUserPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="first_name">First Name *</Label>
+                <Label>First Name *</Label>
                 <Input
-                  id="first_name"
                   name="first_name"
                   value={formData.first_name}
                   onChange={handleChange}
-                  placeholder="First name"
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="last_name">Last Name *</Label>
+                <Label>Last Name *</Label>
                 <Input
-                  id="last_name"
                   name="last_name"
                   value={formData.last_name}
                   onChange={handleChange}
-                  placeholder="Last name"
                   required
                 />
               </div>
             </div>
-
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="username">Username *</Label>
+                <Label>Username *</Label>
                 <Input
-                  id="username"
                   name="username"
                   value={formData.username}
                   onChange={handleChange}
-                  placeholder="Username"
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label>Password *</Label>
                 <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  placeholder="email@example.com"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="phone">Phone</Label>
-                <Input
-                  id="phone"
-                  name="phone"
-                  value={formData.phone}
-                  onChange={handleChange}
-                  placeholder="+1234567890"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Password *</Label>
-                <Input
-                  id="password"
                   name="password"
                   type="password"
                   value={formData.password}
                   onChange={handleChange}
-                  placeholder="Enter password"
                   required
                 />
               </div>
             </div>
-
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <Input
+                  name="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Phone</Label>
+                <Input
+                  name="phone"
+                  value={formData.phone}
+                  onChange={handleChange}
+                />
+              </div>
+            </div>
             <div className="space-y-2">
-              <Label htmlFor="role">Role *</Label>
+              <Label>Role *</Label>
               <select
-                id="role"
                 name="role"
                 value={formData.role}
                 onChange={handleChange}
-                className="w-full h-10 rounded-md border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                className="w-full h-10 rounded-md border border-gray-300 px-3 text-sm"
                 required
               >
                 <option value="SUPER_ADMIN">Super Admin</option>
                 <option value="PHARMACIST">Pharmacist</option>
                 <option value="CASHIER">Cashier</option>
                 <option value="STORE_MANAGER">Store Manager</option>
-                <option value="CUSTOMER">Customer</option>
               </select>
             </div>
-
             <div className="flex gap-3 pt-4">
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting ? (
-                  <div className="flex items-center gap-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    Saving...
-                  </div>
+                  "Saving..."
                 ) : (
                   <>
                     <Save className="h-4 w-4 mr-2" />

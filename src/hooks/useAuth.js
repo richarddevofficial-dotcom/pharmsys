@@ -1,28 +1,25 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
 
 export function useAuth(requireAuth = true) {
   const router = useRouter();
-  const { user, isAuthenticated, isLoading, fetchUser } = useAuthStore();
+  const pathname = usePathname();
+  const user = useAuthStore((state) => state.user);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
   useEffect(() => {
-    if (!isAuthenticated && !isLoading) {
-      fetchUser();
-    }
-  }, [fetchUser, isAuthenticated, isLoading]);
-
-  useEffect(() => {
-    if (!isLoading && requireAuth && !isAuthenticated) {
+    // If auth is required and user is not authenticated, redirect to login
+    if (requireAuth && !isAuthenticated && pathname !== "/login") {
       router.push("/login");
     }
-  }, [isLoading, isAuthenticated, requireAuth, router]);
+  }, [isAuthenticated, requireAuth, router, pathname]);
 
   return {
     user,
     isAuthenticated,
-    isLoading,
+    isLoading: false,
   };
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useAuth } from "@/hooks/useAuth";
 import { PageHeader } from "@/components/ui/page-header";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
@@ -86,6 +87,7 @@ const mockSales = [
 
 export default function SalesPage() {
   const { isLoading: authLoading } = useAuth(true);
+  useRoleAccess();
   const [sales] = useState(mockSales);
   const [search, setSearch] = useState("");
 

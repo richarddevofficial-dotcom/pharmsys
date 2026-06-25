@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useAuth } from "@/hooks/useAuth";
 import { useSettingsStore } from "@/store/settingsStore";
 import { PageHeader } from "@/components/ui/page-header";
@@ -97,6 +98,7 @@ const mockMedicines = [
 
 export default function POSPage() {
   const { user, isLoading: authLoading } = useAuth(true);
+  useRoleAccess();
   // READ ALL SETTINGS FROM STORE - including taxRate
   const { currency, showBothCurrencies, usdToSspRate, taxRate } =
     useSettingsStore();

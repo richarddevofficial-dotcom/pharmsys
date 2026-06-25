@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/card";
 import { useAuthStore } from "@/store/authStore";
 import { useSettingsStore } from "@/store/settingsStore";
-import { Pill, Eye, EyeOff } from "lucide-react";
+import { Pill, Eye, EyeOff, LogIn } from "lucide-react";
 import toast from "react-hot-toast";
 
 export default function LoginPage() {
@@ -28,70 +28,68 @@ export default function LoginPage() {
 
   const handleLogin = (e) => {
     e.preventDefault();
+
+    if (!username || !password) {
+      toast.error("Please enter username and password");
+      return;
+    }
+
     setLoading(true);
     try {
       login(username, password);
-      toast.success("Welcome!");
+      toast.success("Welcome back!");
       router.push("/dashboard");
     } catch (err) {
-      toast.error(err.message || "Login failed");
-      setLoading(false);
-    }
-  };
-
-  const quickLogin = (u, p) => {
-    setUsername(u);
-    setPassword(p);
-    setLoading(true);
-    try {
-      login(u, p);
-      toast.success("Welcome!");
-      router.push("/dashboard");
-    } catch (err) {
-      toast.error(err.message);
+      toast.error(err.message || "Invalid credentials");
       setLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-orange-50 via-white to-gray-100 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
+      <Card className="w-full max-w-md shadow-lg">
+        <CardHeader className="text-center pb-2">
           <div className="flex justify-center mb-4">
             <div className="p-3 bg-orange-100 rounded-full">
               <Pill className="h-8 w-8 text-orange-500" />
             </div>
           </div>
-          <CardTitle className="text-2xl font-bold">{pharmacyName}</CardTitle>
-          <CardDescription>
-            Powered by {systemName} - Sign in to continue
+          <CardTitle className="text-2xl font-bold text-gray-900">
+            {pharmacyName}
+          </CardTitle>
+          <CardDescription className="text-gray-500">
+            Sign in to your account
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-4">
           <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <Label>Username</Label>
+            <div className="space-y-2">
+              <Label htmlFor="username">Username</Label>
               <Input
+                id="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Username"
+                placeholder="Enter your username"
+                className="h-11"
                 required
               />
             </div>
-            <div>
-              <Label>Password</Label>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
               <div className="relative">
                 <Input
+                  id="password"
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Password"
+                  placeholder="Enter your password"
+                  className="h-11 pr-10"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500"
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 >
                   {showPassword ? (
                     <EyeOff className="h-4 w-4" />
@@ -101,47 +99,37 @@ export default function LoginPage() {
                 </button>
               </div>
             </div>
+
             <Button
               type="submit"
-              className="w-full bg-orange-500 hover:bg-orange-600"
+              className="w-full h-11 bg-orange-500 hover:bg-orange-600 text-base font-medium"
               disabled={loading}
             >
-              {loading ? "Signing in..." : "Sign in"}
+              {loading ? (
+                <div className="flex items-center gap-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Signing in...
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <LogIn className="h-4 w-4" />
+                  Sign in
+                </div>
+              )}
             </Button>
           </form>
-          <div className="mt-6 space-y-2">
-            <p className="text-sm text-center text-gray-500">Demo Accounts</p>
-            {[
-              { name: "Super Admin", u: "admin", p: "admin123" },
-              { name: "Pharmacist", u: "pharmacist", p: "pharm123" },
-              { name: "Cashier", u: "cashier", p: "cash123" },
-              { name: "Store Manager", u: "manager", p: "mgr123" },
-            ].map((acc) => (
-              <button
-                key={acc.u}
-                type="button"
-                onClick={() => quickLogin(acc.u, acc.p)}
-                disabled={loading}
-                className="w-full p-3 text-left rounded-lg border hover:border-orange-500 hover:bg-orange-50 transition-all disabled:opacity-50"
-              >
-                <span className="font-medium text-sm">{acc.name}</span>
-                <span className="text-xs text-gray-400 ml-2">
-                  {acc.u} / {acc.p}
-                </span>
-              </button>
-            ))}
-          </div>
-          <div className="mt-4 p-3 bg-orange-50 rounded-lg border border-orange-200">
-            <p className="text-xs text-orange-800 text-center">
-              💡 <strong>Demo Mode:</strong> Using local authentication. Backend
-              API not required.
+
+          <div className="mt-6 text-center">
+            <p className="text-xs text-gray-400">
+              Powered by{" "}
+              <span className="text-orange-500 font-medium">{systemName}</span>
             </p>
           </div>
         </CardContent>
       </Card>
-      <p className="mt-6 text-xs text-gray-400">
-        Powered by{" "}
-        <span className="text-orange-500 font-medium">{systemName}</span>
+
+      <p className="mt-8 text-xs text-gray-400">
+        &copy; {new Date().getFullYear()} {systemName}. All rights reserved.
       </p>
     </div>
   );

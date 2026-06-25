@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { useAuthStore } from "@/store/authStore";
 import { useSettingsStore } from "@/store/settingsStore";
 import {
   LayoutDashboard,
@@ -23,27 +24,101 @@ import {
   X,
 } from "lucide-react";
 
-const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "POS / Sales", href: "/pos", icon: ShoppingCart },
-  { name: "Medicines", href: "/medicines", icon: Pill },
-  { name: "Inventory", href: "/inventory", icon: Package },
-  { name: "Sales History", href: "/sales", icon: ClipboardList },
-  { name: "Purchases", href: "/purchases", icon: ShoppingBag },
-  { name: "Suppliers", href: "/suppliers", icon: Truck },
-  { name: "Prescriptions", href: "/prescriptions", icon: FileText },
-  { name: "Customers", href: "/customers", icon: Users },
-  { name: "Reports", href: "/reports", icon: BarChart3 },
-  { name: "Notifications", href: "/notifications", icon: Bell },
-  { name: "Users", href: "/users", icon: Users },
-  { name: "Settings", href: "/settings", icon: Settings },
+// Define all navigation items
+const allNavigation = [
+  {
+    name: "Dashboard",
+    href: "/dashboard",
+    icon: LayoutDashboard,
+    roles: [
+      "SUPER_ADMIN",
+      "PHARMACIST",
+      "CASHIER",
+      "STORE_MANAGER",
+      "CUSTOMER",
+    ],
+  },
+  {
+    name: "POS / Sales",
+    href: "/pos",
+    icon: ShoppingCart,
+    roles: ["SUPER_ADMIN", "PHARMACIST", "CASHIER"],
+  },
+  {
+    name: "Medicines",
+    href: "/medicines",
+    icon: Pill,
+    roles: ["SUPER_ADMIN", "PHARMACIST", "STORE_MANAGER"],
+  },
+  {
+    name: "Inventory",
+    href: "/inventory",
+    icon: Package,
+    roles: ["SUPER_ADMIN", "PHARMACIST", "STORE_MANAGER"],
+  },
+  {
+    name: "Sales History",
+    href: "/sales",
+    icon: ClipboardList,
+    roles: ["SUPER_ADMIN", "PHARMACIST", "CASHIER"],
+  },
+  {
+    name: "Purchases",
+    href: "/purchases",
+    icon: ShoppingBag,
+    roles: ["SUPER_ADMIN", "PHARMACIST", "STORE_MANAGER"],
+  },
+  {
+    name: "Suppliers",
+    href: "/suppliers",
+    icon: Truck,
+    roles: ["SUPER_ADMIN", "PHARMACIST", "STORE_MANAGER"],
+  },
+  {
+    name: "Prescriptions",
+    href: "/prescriptions",
+    icon: FileText,
+    roles: ["SUPER_ADMIN", "PHARMACIST"],
+  },
+  {
+    name: "Customers",
+    href: "/customers",
+    icon: Users,
+    roles: ["SUPER_ADMIN", "PHARMACIST", "CASHIER"],
+  },
+  {
+    name: "Reports",
+    href: "/reports",
+    icon: BarChart3,
+    roles: ["SUPER_ADMIN", "PHARMACIST", "STORE_MANAGER"],
+  },
+  {
+    name: "Notifications",
+    href: "/notifications",
+    icon: Bell,
+    roles: ["SUPER_ADMIN", "PHARMACIST", "STORE_MANAGER"],
+  },
+  { name: "Users", href: "/users", icon: Users, roles: ["SUPER_ADMIN"] },
+  {
+    name: "Settings",
+    href: "/settings",
+    icon: Settings,
+    roles: ["SUPER_ADMIN"],
+  },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
+  const user = useAuthStore((state) => state.user);
   const { pharmacyName, systemName } = useSettingsStore();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Filter navigation based on user role
+  const userRole = user?.role || "CUSTOMER";
+  const navigation = allNavigation.filter((item) =>
+    item.roles.includes(userRole),
+  );
 
   return (
     <>
@@ -97,6 +172,29 @@ export function Sidebar() {
             </button>
           </div>
         </div>
+
+        {/* User info */}
+        {!collapsed && user && (
+          <div className="px-4 py-3 border-b border-gray-800">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center">
+                <span className="text-xs font-bold text-white">
+                  {user.first_name?.[0]}
+                  {user.last_name?.[0]}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">
+                  {user.first_name} {user.last_name}
+                </p>
+                <p className="text-xs text-orange-400 capitalize">
+                  {userRole.toLowerCase().replace("_", " ")}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {navigation.map((item) => {
             const isActive =
@@ -122,26 +220,6 @@ export function Sidebar() {
             );
           })}
         </nav>
-        <div className="px-3 py-4 border-t border-gray-800">
-          <Link
-            href="/notifications"
-            onClick={() => setMobileOpen(false)}
-            className={cn(
-              "flex items-center gap-3 w-full px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 rounded-lg",
-              collapsed && "lg:justify-center",
-            )}
-          >
-            <Bell className="h-5 w-5" />
-            {!collapsed && (
-              <>
-                <span>Notifications</span>
-                <span className="ml-auto bg-orange-500 text-xs rounded-full px-2 py-1">
-                  3
-                </span>
-              </>
-            )}
-          </Link>
-        </div>
       </div>
     </>
   );

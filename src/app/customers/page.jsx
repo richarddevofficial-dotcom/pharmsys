@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useAuth } from "@/hooks/useAuth";
 import { PageHeader } from "@/components/ui/page-header";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
@@ -87,6 +88,7 @@ const initialCustomers = [
 
 export default function CustomersPage() {
   const { isLoading: authLoading } = useAuth(true);
+  useRoleAccess();
   const [search, setSearch] = useState("");
   const [customers, setCustomers] = useState(initialCustomers);
   const [deleteId, setDeleteId] = useState(null);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useAuth } from "@/hooks/useAuth";
 import { PageHeader } from "@/components/ui/page-header";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
@@ -71,6 +72,7 @@ const mockPurchases = [
 
 export default function PurchasesPage() {
   const { isLoading: authLoading } = useAuth(true);
+  useRoleAccess();
   const [search, setSearch] = useState("");
   const [purchases] = useState(mockPurchases);
   const [selectedPurchase, setSelectedPurchase] = useState(null);

@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { useUserStore } from "@/store/userStore";
 import { PageHeader } from "@/components/ui/page-header";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,57 +35,12 @@ import {
 import toast from "react-hot-toast";
 import Link from "next/link";
 
-const initialUsers = [
-  {
-    id: 1,
-    first_name: "John",
-    last_name: "Admin",
-    username: "admin",
-    email: "admin@pharmacy.com",
-    phone: "+1 234-567-8900",
-    role: "SUPER_ADMIN",
-    is_active: true,
-    last_login: "2024-01-15T14:30:00",
-  },
-  {
-    id: 2,
-    first_name: "Jane",
-    last_name: "Smith",
-    username: "pharmacist",
-    email: "jane@pharmacy.com",
-    phone: "+1 234-567-8901",
-    role: "PHARMACIST",
-    is_active: true,
-    last_login: "2024-01-15T11:00:00",
-  },
-  {
-    id: 3,
-    first_name: "Bob",
-    last_name: "Johnson",
-    username: "cashier",
-    email: "bob@pharmacy.com",
-    phone: "+1 234-567-8902",
-    role: "CASHIER",
-    is_active: true,
-    last_login: "2024-01-15T09:15:00",
-  },
-  {
-    id: 4,
-    first_name: "Alice",
-    last_name: "Williams",
-    username: "manager",
-    email: "alice@pharmacy.com",
-    phone: "+1 234-567-8903",
-    role: "STORE_MANAGER",
-    is_active: false,
-    last_login: "2024-01-10T16:45:00",
-  },
-];
-
 export default function UsersPage() {
   const { isLoading: authLoading } = useAuth(true);
+  useRoleAccess();
+
+  const { users, toggleUserStatus, deleteUser } = useUserStore();
   const [search, setSearch] = useState("");
-  const [users, setUsers] = useState(initialUsers);
   const [deleteId, setDeleteId] = useState(null);
   const [editingUser, setEditingUser] = useState(null);
   const [editForm, setEditForm] = useState({
@@ -92,6 +49,7 @@ export default function UsersPage() {
     email: "",
     phone: "",
     role: "",
+    username: "",
   });
 
   const getRoleBadge = (role) => {
@@ -110,23 +68,12 @@ export default function UsersPage() {
     return roles[role] || { label: role, color: "bg-gray-100 text-gray-800" };
   };
 
-  // FIXED: Toggle user active/inactive status
-  const toggleUserStatus = (id) => {
-    setUsers(
-      users.map((u) => {
-        if (u.id === id) {
-          const newStatus = !u.is_active;
-          toast.success(
-            `User ${newStatus ? "activated" : "deactivated"} successfully!`,
-          );
-          return { ...u, is_active: newStatus };
-        }
-        return u;
-      }),
-    );
+  const handleToggleStatus = (id) => {
+    toggleUserStatus(id);
+    const user = users.find((u) => u.id === id);
+    toast.success(`User ${!user?.is_active ? "activated" : "deactivated"}!`);
   };
 
-  // Open edit modal
   const handleEditClick = (user) => {
     setEditingUser(user.id);
     setEditForm({
@@ -135,22 +82,20 @@ export default function UsersPage() {
       email: user.email,
       phone: user.phone,
       role: user.role,
+      username: user.username,
     });
   };
 
-  // Save edited user
   const handleSaveEdit = () => {
-    setUsers(
-      users.map((u) => (u.id === editingUser ? { ...u, ...editForm } : u)),
-    );
-    toast.success("User updated successfully!");
+    const { updateUser } = useUserStore.getState();
+    updateUser(editingUser, editForm);
+    toast.success("User updated!");
     setEditingUser(null);
   };
 
-  // Delete user
   const handleDelete = () => {
-    setUsers(users.filter((u) => u.id !== deleteId));
-    toast.success("User deleted successfully!");
+    deleteUser(deleteId);
+    toast.success("User deleted!");
     setDeleteId(null);
   };
 
@@ -182,7 +127,6 @@ export default function UsersPage() {
         }
       />
 
-      {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-6">
@@ -234,7 +178,6 @@ export default function UsersPage() {
         </Card>
       </div>
 
-      {/* Users Table */}
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -260,7 +203,7 @@ export default function UsersPage() {
                     <TableHead>Contact</TableHead>
                     <TableHead>Role</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Last Login</TableHead>
+                    <TableHead>Created</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -320,19 +263,9 @@ export default function UsersPage() {
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            {/* FIXED: Status toggle button */}
                             <button
-                              onClick={() => toggleUserStatus(u.id)}
-                              className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium cursor-pointer transition-all hover:shadow ${
-                                u.is_active
-                                  ? "bg-green-100 text-green-800 hover:bg-red-100 hover:text-red-800"
-                                  : "bg-red-100 text-red-800 hover:bg-green-100 hover:bg-green-800"
-                              }`}
-                              title={
-                                u.is_active
-                                  ? "Click to deactivate"
-                                  : "Click to activate"
-                              }
+                              onClick={() => handleToggleStatus(u.id)}
+                              className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium cursor-pointer ${u.is_active ? "bg-green-100 text-green-800 hover:bg-red-100 hover:text-red-800" : "bg-red-100 text-red-800 hover:bg-green-100 hover:text-green-800"}`}
                             >
                               {u.is_active ? (
                                 <>
@@ -346,7 +279,7 @@ export default function UsersPage() {
                             </button>
                           </TableCell>
                           <TableCell className="text-sm text-gray-500 whitespace-nowrap">
-                            {new Date(u.last_login).toLocaleDateString()}
+                            {new Date(u.created_at).toLocaleDateString()}
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-1">
@@ -377,7 +310,6 @@ export default function UsersPage() {
         </CardContent>
       </Card>
 
-      {/* Edit User Modal */}
       {editingUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
@@ -402,6 +334,16 @@ export default function UsersPage() {
                     }
                   />
                 </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Username</label>
+                <Input
+                  value={editForm.username}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, username: e.target.value })
+                  }
+                  disabled
+                />
               </div>
               <div>
                 <label className="text-sm font-medium">Email</label>
@@ -450,7 +392,6 @@ export default function UsersPage() {
         </div>
       )}
 
-      {/* Delete Confirmation */}
       <ConfirmDialog
         isOpen={!!deleteId}
         onClose={() => setDeleteId(null)}

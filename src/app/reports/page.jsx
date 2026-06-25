@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useAuth } from "@/hooks/useAuth";
 import { PageHeader } from "@/components/ui/page-header";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
@@ -40,6 +41,7 @@ import {
   Pie,
   Cell,
 } from "recharts";
+import { useReactTable } from "@tanstack/react-table";
 
 const weeklyData = [
   { day: "Mon", sales: 1200 },
@@ -85,6 +87,7 @@ const COLORS = ["#f97316", "#ea580c", "#fdba74", "#c2410c", "#9a3412"];
 
 export default function ReportsPage() {
   const { isLoading: authLoading } = useAuth(true);
+  useRoleAccess();
   const [dateRange, setDateRange] = useState("week");
   const [generatedReport, setGeneratedReport] = useState(null);
   const [showFilter, setShowFilter] = useState(false);

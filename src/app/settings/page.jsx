@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useAuth } from "@/hooks/useAuth";
 import { PageHeader } from "@/components/ui/page-header";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
@@ -15,6 +16,7 @@ import toast from "react-hot-toast";
 
 export default function SettingsPage() {
   const { isLoading: authLoading } = useAuth(true);
+  useRoleAccess();
   const [activeTab, setActiveTab] = useState("general");
 
   const settingsStore = useSettingsStore();
